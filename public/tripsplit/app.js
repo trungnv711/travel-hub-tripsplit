@@ -122,6 +122,15 @@
     clearTimeout(remoteSyncTimer);
     remoteSyncTimer = setTimeout(() => syncSharedTrip().catch(() => {}), 700);
   }
+  async function fetchSharedTrip(shareId) {
+    let response;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      response = await fetch(`/api/shared-trips/${encodeURIComponent(shareId)}`);
+      if (response.status !== 404 || attempt === 2) return response;
+      await new Promise((resolve) => setTimeout(resolve, 450 * (attempt + 1)));
+    }
+    return response;
+  }
   async function syncSharedTrip() {
     const trip = activeTrip();
     if (!trip.shareId || location.protocol === "file:") return;
@@ -169,7 +178,7 @@
     if (!SHARE_ID_PATTERN.test(shareId)) { showToast("Link trip không hợp lệ."); return; }
     dom.saveStatus.textContent = "Đang tải dữ liệu chung…";
     try {
-      const response = await fetch(`/api/shared-trips/${encodeURIComponent(shareId)}`);
+      const response = await fetchSharedTrip(shareId);
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || "Không thể tải chuyến đi.");
       if (!Logic.validateTrip(result.trip).valid) throw new Error("Dữ liệu chuyến đi trên máy chủ không hợp lệ.");
