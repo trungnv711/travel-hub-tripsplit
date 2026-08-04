@@ -71,8 +71,32 @@
     return summary;
   }
 
-  function calculateSettlements(members, expenses) {
+  function calculateOutstandingSummary(members, expenses, payments) {
     const summary = calculateSummary(members, expenses);
+    Object.values(summary).forEach((row) => {
+      row.originalBalance = row.balance;
+      row.transferred = 0;
+      row.received = 0;
+    });
+
+    (payments || []).forEach((payment) => {
+      const amount = toSafeInteger(payment && payment.amount);
+      if (!amount) return;
+      if (summary[payment.fromId]) {
+        summary[payment.fromId].transferred += amount;
+        summary[payment.fromId].balance += amount;
+      }
+      if (summary[payment.toId]) {
+        summary[payment.toId].received += amount;
+        summary[payment.toId].balance -= amount;
+      }
+    });
+
+    return summary;
+  }
+
+  function calculateSettlements(members, expenses, payments) {
+    const summary = calculateOutstandingSummary(members, expenses, payments);
 
     const creditors = Object.values(summary)
       .filter((row) => row.balance > 0)
@@ -206,6 +230,7 @@
     splitEqual,
     getExpenseShares,
     calculateSummary,
+    calculateOutstandingSummary,
     calculateSettlements,
     validateState,
     validateTrip,

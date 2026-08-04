@@ -14,7 +14,7 @@
     "expenseForm", "expenseFormTitle", "expenseDescription", "expenseAmount", "expensePayer",
     "expenseDate", "expenseCategory", "expenseNote", "participantList", "customShares",
     "equalSplitPreview", "expenseError", "btnCancelEdit", "btnSaveExpense", "expenseTableBody",
-    "expenseEmpty", "expenseSearch", "summaryTableBody", "settlementList", "statTotal",
+    "expenseEmpty", "expenseSearch", "summaryTableBody", "settlementList", "paymentHistoryList", "statTotal",
     "statExpenseCount", "statMemberCount", "statTransferCount", "toast", "btnNewTrip", "btnShareTrip", "btnEditTrip",
     "btnDeleteTrip", "btnExportJson", "btnExportCsv", "fileImportJson", "btnSelectAll",
     "btnClearParticipants", "tripDialog", "tripForm", "tripDialogTitle", "tripId", "tripName",
@@ -36,7 +36,14 @@
   }
   function now() { return new Date().toISOString(); }
   function localDateTimeString(date = new Date()) { return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16); }
-  function expenseDateTimeInput(value) { const text = String(value || ""); return /^\d{4}-\d{2}-\d{2}$/.test(text) ? `${text}T00:00` : text.slice(0, 16); }
+  function localDateString() { return localDateTimeString().slice(0, 10); }
+  function expenseDateInput(value) { return String(value || "").slice(0, 10); }
+  function stampExpenseDate(selectedDate, existingValue = "") {
+    const date = selectedDate || localDateString();
+    const existing = String(existingValue || "");
+    if (existing.startsWith(`${date}T`)) return existing;
+    return `${date}T${localDateTimeString().slice(11)}`;
+  }
   function formatExpenseDateTime(value) {
     const text = String(value || "");
     if (!text) return "";
@@ -59,8 +66,8 @@
     return `${format(trip.startDate)} – ${format(trip.endDate)}`;
   }
 
-  function makeTrip({ id = uid("trip"), name, destination = "", startDate = "", endDate = "", status = "planning", members = [], expenses = [] }) {
-    return { id, name, destination, startDate, endDate, status, members, expenses, createdAt: now(), updatedAt: now() };
+  function makeTrip({ id = uid("trip"), name, destination = "", startDate = "", endDate = "", status = "planning", members = [], expenses = [], payments = [] }) {
+    return { id, name, destination, startDate, endDate, status, members, expenses, payments, createdAt: now(), updatedAt: now() };
   }
 
   function createSamplePortfolio() {
@@ -84,6 +91,7 @@
     candidate.version = 2;
     candidate.trips.forEach((trip) => {
       trip.destination ||= ""; trip.startDate ||= ""; trip.endDate ||= ""; trip.status ||= "planning";
+      trip.payments ||= [];
       trip.members.forEach((member) => { member.email ||= ""; });
     });
     return candidate;
@@ -221,7 +229,7 @@
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || "Không thể tải chuyến đi.");
       if (!Logic.validateTrip(result.trip).valid) throw new Error("Dữ liệu chuyến đi trên máy chủ không hợp lệ.");
-      const sharedTrip = { ...result.trip, shareId, shareRevision: result.revision };
+      const sharedTrip = { ...result.trip, payments: Array.isArray(result.trip.payments) ? result.trip.payments : [], shareId, shareRevision: result.revision };
       isApplyingSharedTrip = true;
       const index = portfolio.trips.findIndex((trip) => trip.shareId === shareId || trip.id === sharedTrip.id);
       if (index >= 0) portfolio.trips[index] = sharedTrip; else portfolio.trips.unshift(sharedTrip);
@@ -251,7 +259,7 @@
     const trip = activeTrip();
     dom.memberList.innerHTML = trip.members.length ? trip.members.map((member) => {
       const inUse = trip.expenses.some((expense) => expense.payerId === member.id || expense.participantIds.includes(member.id));
-      return `<div class="member-item ${editingMemberId === member.id ? "member-item--editing" : ""}"><div><strong>${escapeHtml(member.name)}</strong><small class="${member.email ? "" : "missing-email"}">${escapeHtml(member.email || "Thiếu email chia sẻ")}</small></div><div class="member-item__actions"><button class="icon-button" type="button" data-edit-member="${escapeHtml(member.id)}" title="Sửa tên hoặc email" aria-label="Sửa ${escapeHtml(member.name)}">✎</button><button class="icon-button icon-button--danger" type="button" data-remove-member="${escapeHtml(member.id)}" ${inUse ? "disabled" : ""} title="${inUse ? "Đang có dữ liệu chi phí" : "Xóa thành viên"}" aria-label="Xóa ${escapeHtml(member.name)}">✕</button></div></div>`;
+      return `<div class="member-item ${editingMemberId === member.id ? "member-item--editing" : ""}"><div><strong>${escapeHtml(member.name)}</strong><small class="${member.email ? "" : "missing-email"}">${escapeHtml(member.email || "Chưa có email · vẫn dùng được")}</small></div><div class="member-item__actions"><button class="icon-button" type="button" data-edit-member="${escapeHtml(member.id)}" title="Sửa tên hoặc email" aria-label="Sửa ${escapeHtml(member.name)}">✎</button><button class="icon-button icon-button--danger" type="button" data-remove-member="${escapeHtml(member.id)}" ${inUse ? "disabled" : ""} title="${inUse ? "Đang có dữ liệu chi phí" : "Xóa thành viên"}" aria-label="Xóa ${escapeHtml(member.name)}">✕</button></div></div>`;
     }).join("") : '<div class="empty-state">Chưa có thành viên.</div>';
   }
 
@@ -278,22 +286,25 @@
 
   function renderSummary() {
     const trip = activeTrip();
-    const summary = Logic.calculateSummary(trip.members, trip.expenses);
+    const summary = Logic.calculateOutstandingSummary(trip.members, trip.expenses, trip.payments);
     dom.summaryTableBody.innerHTML = trip.members.length ? trip.members.map((m) => {
       const row = summary[m.id];
       const cls = row.balance > 0 ? "balance-positive" : row.balance < 0 ? "balance-negative" : "";
-      const status = row.balance > 0 ? '<span class="status-badge status-badge--receive">Được nhận</span>' : row.balance < 0 ? '<span class="status-badge status-badge--pay">Cần trả</span>' : '<span class="status-badge status-badge--done">Đã cân bằng</span>';
-      return `<tr><td><strong>${escapeHtml(m.name)}</strong></td><td class="align-right">${formatCurrency(row.owed)}</td><td class="align-right">${formatCurrency(row.paid)}</td><td class="align-right amount ${cls}">${row.balance > 0 ? "+" : ""}${formatCurrency(row.balance)}</td><td>${status}</td></tr>`;
-    }).join("") : '<tr><td colspan="5" class="empty-state">Chưa có thành viên.</td></tr>';
-    const transfers = Logic.calculateSettlements(trip.members, trip.expenses);
-    dom.settlementList.innerHTML = transfers.length ? transfers.map((t) => `<div class="settlement-item"><div class="settlement-person">${escapeHtml(t.fromName)}</div><div class="transfer-arrow"><span>chuyển</span><strong>${formatCurrency(t.amount)}</strong><span>→</span></div><div class="settlement-person">${escapeHtml(t.toName)}</div></div>`).join("") : '<div class="empty-state">Không có khoản tiền cần chuyển.</div>';
+      const hasPayment = row.transferred > 0 || row.received > 0;
+      const status = row.balance > 0 ? '<span class="status-badge status-badge--receive">Còn được nhận</span>' : row.balance < 0 ? '<span class="status-badge status-badge--pay">Còn phải trả</span>' : hasPayment ? '<span class="status-badge status-badge--done">Đã thanh toán</span>' : '<span class="status-badge status-badge--done">Đã cân bằng</span>';
+      return `<tr class="${hasPayment && row.balance === 0 ? "summary-row--settled" : ""}"><td><strong>${escapeHtml(m.name)}</strong></td><td class="align-right">${formatCurrency(row.owed)}</td><td class="align-right">${formatCurrency(row.paid)}</td><td class="align-right payment-out">${formatCurrency(row.transferred)}</td><td class="align-right payment-in">${formatCurrency(row.received)}</td><td class="align-right amount ${cls}">${row.balance > 0 ? "+" : ""}${formatCurrency(row.balance)}</td><td>${status}</td></tr>`;
+    }).join("") : '<tr><td colspan="7" class="empty-state">Chưa có thành viên.</td></tr>';
+    const transfers = Logic.calculateSettlements(trip.members, trip.expenses, trip.payments);
+    dom.settlementList.innerHTML = transfers.length ? transfers.map((t) => `<div class="settlement-item settlement-item--pending"><div class="settlement-person">${escapeHtml(t.fromName)}<small>cần trả</small></div><div class="transfer-arrow"><span>chuyển cho</span><strong>${formatCurrency(t.amount)}</strong><span>→</span></div><div class="settlement-person">${escapeHtml(t.toName)}<small>sẽ nhận</small></div><button class="btn btn--paid" type="button" data-mark-paid="${escapeHtml(t.fromId)}" data-paid-to="${escapeHtml(t.toId)}" data-paid-amount="${t.amount}">✓ Đánh dấu đã trả</button></div>`).join("") : '<div class="empty-state empty-state--success">✓ Không còn khoản tiền nào cần chuyển.</div>';
+    const payments = [...trip.payments].sort((a, b) => String(b.paidAt).localeCompare(String(a.paidAt)));
+    dom.paymentHistoryList.innerHTML = payments.length ? payments.map((payment) => `<div class="settlement-item settlement-item--paid"><div class="settlement-person">${escapeHtml(memberName(payment.fromId))}<small>đã trả</small></div><div class="transfer-arrow"><span>${escapeHtml(formatExpenseDateTime(payment.paidAt))}</span><strong>${formatCurrency(payment.amount)}</strong><span>→</span></div><div class="settlement-person">${escapeHtml(memberName(payment.toId))}<small>đã nhận</small></div><button class="link-button link-button--danger" type="button" data-undo-payment="${escapeHtml(payment.id)}">Hoàn tác</button></div>`).join("") : '<div class="empty-state">Chưa có giao dịch nào được đánh dấu đã trả.</div>';
   }
   function renderStats() {
     const trip = activeTrip();
     dom.statTotal.textContent = formatCurrency(trip.expenses.reduce((sum, e) => sum + e.amount, 0));
     dom.statExpenseCount.textContent = trip.expenses.length;
     dom.statMemberCount.textContent = trip.members.length;
-    dom.statTransferCount.textContent = Logic.calculateSettlements(trip.members, trip.expenses).length;
+    dom.statTransferCount.textContent = Logic.calculateSettlements(trip.members, trip.expenses, trip.payments).length;
   }
 
   function selectedSplitMode() { return $('input[name="splitMode"]:checked')?.value || "equal"; }
@@ -352,14 +363,14 @@
   }
 
   function resetExpenseForm() {
-    editingExpenseId = null; dom.expenseForm.reset(); dom.expenseDate.value = localDateTimeString(); dom.expenseCategory.value = "Ăn uống";
+    editingExpenseId = null; dom.expenseForm.reset(); dom.expenseDate.value = localDateString(); dom.expenseCategory.value = "Ăn uống";
     dom.expenseFormTitle.textContent = "Thêm khoản chi"; dom.btnSaveExpense.textContent = "Lưu khoản chi"; dom.btnCancelEdit.classList.add("hidden"); dom.expenseError.textContent = "";
     renderPayerOptions(); renderParticipants(activeTrip().members.map((m) => m.id)); updateSplitEditor();
   }
   function beginEditExpense(id) {
     const e = activeTrip().expenses.find((item) => item.id === id); if (!e) return;
     editingExpenseId = id; dom.expenseFormTitle.textContent = "Sửa khoản chi"; dom.btnSaveExpense.textContent = "Cập nhật"; dom.btnCancelEdit.classList.remove("hidden");
-    dom.expenseDescription.value = e.description; dom.expenseAmount.value = formatNumber(e.amount); dom.expensePayer.value = e.payerId; dom.expenseDate.value = expenseDateTimeInput(e.date); dom.expenseCategory.value = e.category || "Khác"; dom.expenseNote.value = e.note || "";
+    dom.expenseDescription.value = e.description; dom.expenseAmount.value = formatNumber(e.amount); dom.expensePayer.value = e.payerId; dom.expenseDate.value = expenseDateInput(e.date); dom.expenseCategory.value = e.category || "Khác"; dom.expenseNote.value = e.note || "";
     $(`input[name="splitMode"][value="${e.splitMode || "equal"}"]`).checked = true; renderParticipants(e.participantIds); updateSplitEditor();
     if (e.splitMode === "custom") Object.entries(e.customShares || {}).forEach(([id2, value]) => { const input = $(`#customShares input[data-share-member="${CSS.escape(id2)}"]`); if (input) input.value = Number(value) > 0 ? formatNumber(value) : ""; });
     updateCustomSuggestions(); dom.expenseForm.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -437,26 +448,41 @@
   function safeFilename(value) { return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase() || "trip"; }
   function csvCell(value) { return `"${String(value ?? "").replaceAll('"', '""')}"`; }
   function buildSheetPayload() {
-    const trip = activeTrip(), summary = Logic.calculateSummary(trip.members, trip.expenses), settlements = Logic.calculateSettlements(trip.members, trip.expenses);
-    return { version: 1, trip: { id: trip.id, name: trip.name, destination: trip.destination, startDate: trip.startDate, endDate: trip.endDate, status: statusLabel(trip.status), members: trip.members, expenses: trip.expenses.map((e) => ({ ...e, payerName: memberName(e.payerId), participantNames: e.participantIds.map(memberName), shares: Logic.getExpenseShares(e) })) }, summary: trip.members.map((m) => ({ ...summary[m.id], email: m.email || "" })), settlements, generatedAt: now() };
+    const trip = activeTrip(), summary = Logic.calculateOutstandingSummary(trip.members, trip.expenses, trip.payments), settlements = Logic.calculateSettlements(trip.members, trip.expenses, trip.payments);
+    const payments = trip.payments.map((payment) => ({ ...payment, fromName: memberName(payment.fromId), toName: memberName(payment.toId) }));
+    return { version: 2, trip: { id: trip.id, name: trip.name, destination: trip.destination, startDate: trip.startDate, endDate: trip.endDate, status: statusLabel(trip.status), members: trip.members, expenses: trip.expenses.map((e) => ({ ...e, payerName: memberName(e.payerId), participantNames: e.participantIds.map(memberName), shares: Logic.getExpenseShares(e) })) }, summary: trip.members.map((m) => ({ ...summary[m.id], email: m.email || "" })), settlements, payments, generatedAt: now() };
   }
   function exportCsv() {
     const payload = buildSheetPayload(), rows = [["CHUYẾN ĐI", payload.trip.name], ["Điểm đến", payload.trip.destination], ["Thời gian", formatDateRange(activeTrip())], [], ["CHI PHÍ"], ["Nội dung", "Ngày & giờ", "Nhóm", "Tổng tiền", "Người trả", "Người tham gia", "Cách chia", "Ghi chú"]];
     payload.trip.expenses.forEach((e) => rows.push([e.description, e.date, e.category, e.amount, e.payerName, e.participantNames.join(", "), e.splitMode === "custom" ? "Tùy chỉnh" : "Chia đều", e.note]));
-    rows.push([], ["ĐỐI SOÁT"], ["Thành viên", "Email", "Phải chịu", "Đã trả", "Số dư"]); payload.summary.forEach((r) => rows.push([r.name, r.email, r.owed, r.paid, r.balance]));
+    rows.push([], ["ĐỐI SOÁT"], ["Thành viên", "Email", "Phải chịu", "Đã ứng", "Đã chuyển", "Đã nhận", "Còn lại"]); payload.summary.forEach((r) => rows.push([r.name, r.email, r.owed, r.paid, r.transferred, r.received, r.balance]));
+    rows.push([], ["CÔNG NỢ CHƯA THANH TOÁN"], ["Người cần trả", "Người cần nhận", "Số tiền", "Trạng thái"]); payload.settlements.forEach((r) => rows.push([r.fromName, r.toName, r.amount, "Chưa thanh toán"]));
+    rows.push([], ["LỊCH SỬ ĐÃ THANH TOÁN"], ["Người trả", "Người nhận", "Số tiền", "Thời gian"]); payload.payments.forEach((r) => rows.push([r.fromName, r.toName, r.amount, r.paidAt]));
     download(`${safeFilename(payload.trip.name)}.csv`, "\uFEFF" + rows.map((r) => r.map(csvCell).join(",")).join("\r\n"), "text/csv;charset=utf-8");
   }
   function shareSheet() {
-    const url = dom.appsScriptUrl.value.trim(), missing = activeTrip().members.filter((m) => !validEmail(m.email)); dom.sheetError.textContent = "";
-    if (!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(url)) { dom.sheetError.textContent = "Hãy nhập Web App URL hợp lệ theo hướng dẫn README."; return; }
-    if (!activeTrip().members.length) { dom.sheetError.textContent = "Trip chưa có thành viên để chia sẻ."; return; }
-    if (missing.length) { dom.sheetError.textContent = `Cần bổ sung email hợp lệ cho: ${missing.map((m) => m.name).join(", ")}.`; return; }
+    const url = dom.appsScriptUrl.value.trim(); dom.sheetError.textContent = "";
+    if (!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(url)) { dom.sheetError.textContent = "Hãy nhập Web App URL hợp lệ theo hướng dẫn cấu hình phía trên."; return; }
+    if (!activeTrip().members.length) { dom.sheetError.textContent = "Trip chưa có thành viên."; return; }
     localStorage.setItem(SCRIPT_URL_KEY, url);
     const secret = dom.appsScriptSecret.value.trim(); if (!secret) { dom.sheetError.textContent = "Hãy nhập mã bí mật đã cấu hình trong Script Properties."; return; }
     localStorage.setItem(SCRIPT_SECRET_KEY, secret);
     const form = document.createElement("form"); form.method = "POST"; form.action = url; form.target = "_blank";
     const input = document.createElement("textarea"); input.name = "payload"; input.value = JSON.stringify({ ...buildSheetPayload(), secret }); form.appendChild(input); form.hidden = true; document.body.appendChild(form); form.submit(); form.remove();
     showToast("Đang tạo/cập nhật Sheet và cấp quyền thành viên…");
+  }
+  function markSettlementPaid(fromId, toId, amount) {
+    const trip = activeTrip(), value = Logic.toSafeInteger(amount);
+    const from = memberName(fromId), to = memberName(toId);
+    if (!value || !confirm(`Xác nhận ${from} đã chuyển ${formatCurrency(value)} cho ${to}?`)) return;
+    trip.payments.push({ id: uid("payment"), fromId, toId, amount: value, paidAt: now() });
+    savePortfolio("Đã ghi nhận thanh toán"); render(); showToast(`Đã đánh dấu ${from} thanh toán cho ${to}.`);
+  }
+  function undoPayment(paymentId) {
+    const trip = activeTrip(), payment = trip.payments.find((item) => item.id === paymentId);
+    if (!payment || !confirm("Hoàn tác giao dịch đã thanh toán này?")) return;
+    trip.payments = trip.payments.filter((item) => item.id !== paymentId);
+    savePortfolio("Đã hoàn tác thanh toán"); render(); showToast("Đã hoàn tác và tính lại công nợ.");
   }
   async function generateAppsScriptSecret() {
     const bytes = crypto.getRandomValues(new Uint8Array(24));
@@ -478,8 +504,10 @@
   dom.btnDeleteTrip.addEventListener("click", () => { if (portfolio.trips.length === 1) { showToast("Cần giữ lại ít nhất một chuyến đi."); return; } const trip = activeTrip(); if (!confirm(`Xóa toàn bộ dữ liệu của “${trip.name}” khỏi thiết bị này?`)) return; portfolio.trips = portfolio.trips.filter((t) => t.id !== trip.id); portfolio.activeTripId = portfolio.trips[0].id; resetMemberForm(); localStorage.setItem(STORAGE_KEY, JSON.stringify(portfolio)); resetExpenseForm(); render(); setSharedUrl(activeTrip().shareId || ""); showToast("Đã xóa chuyến đi khỏi thiết bị này."); });
   dom.tripForm.addEventListener("submit", (event) => { event.preventDefault(); saveTripFromDialog(); }); [dom.btnCloseTripDialog, dom.btnCancelTrip].forEach((button) => button.addEventListener("click", () => dom.tripDialog.close()));
   dom.memberForm.addEventListener("submit", (event) => { event.preventDefault(); saveMember(); }); dom.btnCancelMemberEdit.addEventListener("click", () => { resetMemberForm(); renderMembers(); }); dom.memberList.addEventListener("click", (event) => { const editButton = event.target.closest("[data-edit-member]"), removeButton = event.target.closest("[data-remove-member]"); if (editButton) beginEditMember(editButton.dataset.editMember); if (removeButton) removeMember(removeButton.dataset.removeMember); });
-  dom.expenseForm.addEventListener("submit", (event) => { event.preventDefault(); const result = validateExpense(); if (result.message) { dom.expenseError.textContent = result.message; return; } const trip = activeTrip(); if (editingExpenseId) { const index = trip.expenses.findIndex((e) => e.id === editingExpenseId); trip.expenses[index] = { ...trip.expenses[index], ...result.data, updatedAt: now() }; showToast("Đã cập nhật khoản chi."); } else { trip.expenses.unshift({ id: uid("expense"), ...result.data, createdAt: now() }); showToast("Đã thêm khoản chi."); } savePortfolio(); resetExpenseForm(); render(); });
+  dom.expenseForm.addEventListener("submit", (event) => { event.preventDefault(); const result = validateExpense(); if (result.message) { dom.expenseError.textContent = result.message; return; } const trip = activeTrip(); if (editingExpenseId) { const index = trip.expenses.findIndex((e) => e.id === editingExpenseId), existing = trip.expenses[index]; result.data.date = stampExpenseDate(result.data.date, existing.date); trip.expenses[index] = { ...existing, ...result.data, updatedAt: now() }; showToast("Đã cập nhật khoản chi."); } else { result.data.date = stampExpenseDate(result.data.date); trip.expenses.unshift({ id: uid("expense"), ...result.data, createdAt: now() }); showToast("Đã thêm khoản chi."); } savePortfolio(); resetExpenseForm(); render(); });
   dom.expenseTableBody.addEventListener("click", (event) => { const edit = event.target.closest("[data-edit-expense]"), remove = event.target.closest("[data-delete-expense]"); if (edit) beginEditExpense(edit.dataset.editExpense); if (remove) { const trip = activeTrip(), e = trip.expenses.find((item) => item.id === remove.dataset.deleteExpense); if (e && confirm(`Xóa khoản “${e.description}”?`)) { trip.expenses = trip.expenses.filter((item) => item.id !== e.id); if (editingExpenseId === e.id) resetExpenseForm(); savePortfolio(); render(); } } });
+  dom.settlementList.addEventListener("click", (event) => { const button = event.target.closest("[data-mark-paid]"); if (button) markSettlementPaid(button.dataset.markPaid, button.dataset.paidTo, button.dataset.paidAmount); });
+  dom.paymentHistoryList.addEventListener("click", (event) => { const button = event.target.closest("[data-undo-payment]"); if (button) undoPayment(button.dataset.undoPayment); });
   dom.expenseSearch.addEventListener("input", renderExpenses); dom.expenseAmount.addEventListener("input", () => { const value = parseMoney(dom.expenseAmount.value); dom.expenseAmount.value = value ? formatNumber(value) : ""; updateSplitEditor(); }); dom.participantList.addEventListener("change", updateSplitEditor); $$('input[name="splitMode"]').forEach((r) => r.addEventListener("change", updateSplitEditor)); dom.customShares.addEventListener("input", (event) => { const input = event.target.closest("[data-share-member]"); if (input) { if (!input.value.includes("%")) { const value = parseMoney(input.value); input.value = input.value.trim() ? formatNumber(value) : ""; } updateCustomSuggestions(); } });
   dom.btnSelectAll.addEventListener("click", () => { $$('input[name="participant"]').forEach((i) => { i.checked = true; }); updateSplitEditor(); }); dom.btnClearParticipants.addEventListener("click", () => { $$('input[name="participant"]').forEach((i) => { i.checked = false; }); updateSplitEditor(); }); dom.btnCancelEdit.addEventListener("click", resetExpenseForm);
   dom.btnExportJson.addEventListener("click", () => download("trip-split-backup.json", JSON.stringify(portfolio, null, 2), "application/json;charset=utf-8")); dom.btnExportCsv.addEventListener("click", exportCsv); dom.fileImportJson.addEventListener("change", () => { if (dom.fileImportJson.files[0]) importJson(dom.fileImportJson.files[0]); }); dom.btnGenerateSecret.addEventListener("click", generateAppsScriptSecret); dom.btnShareSheet.addEventListener("click", shareSheet); dom.appsScriptUrl.addEventListener("change", () => localStorage.setItem(SCRIPT_URL_KEY, dom.appsScriptUrl.value.trim())); dom.appsScriptSecret.addEventListener("change", () => localStorage.setItem(SCRIPT_SECRET_KEY, dom.appsScriptSecret.value.trim()));
@@ -487,7 +515,7 @@
   async function initialize() {
     dom.appsScriptUrl.value = localStorage.getItem(SCRIPT_URL_KEY) || "";
     dom.appsScriptSecret.value = localStorage.getItem(SCRIPT_SECRET_KEY) || "";
-    dom.expenseDate.value = localDateTimeString();
+    dom.expenseDate.value = localDateString();
     await loadSharedTripFromUrl();
     localStorage.setItem(STORAGE_KEY, JSON.stringify(portfolio));
     render();

@@ -684,6 +684,11 @@ tbody tr:hover {
   color: var(--danger);
 }
 
+.payment-out { color: #0369a1; }
+.payment-in { color: #15803d; }
+.summary-row--settled { background: #f0fdf4; }
+.summary-row--settled .status-badge--done { background: #dcfce7; color: #15803d; }
+
 .status-badge {
   display: inline-flex;
   align-items: center;
@@ -715,7 +720,7 @@ tbody tr:hover {
 
 .settlement-item {
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns: 1fr auto 1fr auto;
   align-items: center;
   gap: 12px;
   padding: 14px;
@@ -723,12 +728,23 @@ tbody tr:hover {
   border-radius: 12px;
 }
 
+.settlement-item--pending { border-color: #fed7aa; background: #fffaf5; }
+.settlement-item--paid { border-color: #86efac; background: #f0fdf4; }
+
 .settlement-person {
   font-weight: 800;
 }
 
-.settlement-person:last-child {
+.settlement-person:nth-child(3) {
   text-align: right;
+}
+
+.settlement-person small {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .transfer-arrow {
@@ -743,6 +759,14 @@ tbody tr:hover {
   color: var(--primary);
   font-size: 15px;
 }
+
+.btn--paid { background: #15803d; color: #fff; }
+.btn--paid:hover { background: #166534; }
+.link-button--danger { color: #b91c1c; }
+.payment-history { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--line); }
+.payment-history h3 { margin: 0; font-size: 16px; }
+.empty-state--success { color: #15803d; background: #f0fdf4; border-radius: 10px; }
+.field-hint { display: block; margin-top: 5px; color: var(--muted); font-size: 11px; }
 
 .empty-state {
   padding: 26px;
@@ -861,7 +885,7 @@ dialog::backdrop { background: rgba(15, 23, 42, .48); backdrop-filter: blur(3px)
     text-align: center;
   }
 
-  .settlement-person:last-child {
+  .settlement-person:nth-child(3) {
     text-align: center;
   }
 
