@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description" content="Quản lý và chia chi phí cho nhiều chuyến đi, xuất và chia sẻ Google Sheet." />
   <title>TripSplit — Quản lý nhiều chuyến đi</title>
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=9" />
 </head>
 <body>
   <header class="topbar">
@@ -98,7 +98,7 @@
           </form>
         </section>
 
-        <section class="card"><div class="section-title section-title--row"><div><h2>Danh sách chi phí</h2><p>Chỉ hiển thị dữ liệu của chuyến đi đang chọn.</p></div><input id="expenseSearch" class="search-input" type="search" placeholder="Tìm nội dung..." /></div><div class="table-wrap"><table><thead><tr><th>Nội dung</th><th>Ngày &amp; giờ</th><th>Người trả</th><th>Người tham gia</th><th class="align-right">Tổng tiền</th><th class="align-right">Bình quân/người</th><th></th></tr></thead><tbody id="expenseTableBody"></tbody></table></div><div id="expenseEmpty" class="empty-state hidden">Chưa có khoản chi nào.</div></section>
+        <section class="card"><div class="section-title section-title--row"><div><h2>Danh sách chi phí</h2><p>Chỉ hiển thị dữ liệu của chuyến đi đang chọn.</p></div><input id="expenseSearch" class="search-input" type="search" placeholder="Tìm nội dung..." /></div><div class="table-wrap"><table><thead><tr><th>Nội dung</th><th>Ngày &amp; giờ</th><th>Người trả</th><th>Người tham gia</th><th class="align-right">Tổng tiền</th><th class="align-right">Tổng tiền/người</th><th></th></tr></thead><tbody id="expenseTableBody"></tbody></table></div><div id="expenseEmpty" class="empty-state hidden">Chưa có khoản chi nào.</div></section>
         <section class="card"><div class="section-title"><h2>Đối soát theo thành viên</h2><p>Ghi nhận thanh toán sẽ tự tính lại số còn nợ và số còn được nhận.</p></div><div class="table-wrap"><table><thead><tr><th>Thành viên</th><th class="align-right">Phải chịu</th><th class="align-right">Đã ứng</th><th class="align-right">Đã chuyển</th><th class="align-right">Đã nhận</th><th class="align-right">Còn lại</th><th>Trạng thái</th></tr></thead><tbody id="summaryTableBody"></tbody></table></div></section>
         <section class="card settlement-card"><div class="section-title"><h2>Công nợ cần thanh toán</h2><p>Nhấn “Đánh dấu đã trả” sau khi người gửi hoàn tất chuyển tiền.</p></div><div id="settlementList" class="settlement-list"></div><div class="payment-history"><div class="section-title"><h3>Lịch sử đã thanh toán</h3><p>Các giao dịch đã xác nhận được tô xanh và có thể hoàn tác.</p></div><div id="paymentHistoryList" class="settlement-list"></div></div></section>
       </div>
@@ -118,6 +118,6 @@
   </dialog>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="logic.js"></script><script src="app.js"></script>
+  <script src="logic.js?v=9"></script><script src="app.js?v=9"></script>
 </body>
 </html>

@@ -99,7 +99,7 @@ function writeExpenses_(spreadsheet, data) {
   var sheet = getSheet_(spreadsheet, 'Chi phí');
   var memberNames = {};
   data.trip.members.forEach(function(member) { memberNames[member.id] = member.name; });
-  var rows = [['STT', 'Nội dung', 'Ngày & giờ', 'Nhóm', 'Tổng tiền', 'Bình quân/người', 'Người ứng', 'Người tham gia', 'Phân bổ chi tiết', 'Ghi chú']];
+  var rows = [['STT', 'Nội dung', 'Ngày & giờ', 'Nhóm', 'Tổng tiền', 'Tổng tiền/người', 'Người ứng', 'Người tham gia', 'Phân bổ chi tiết', 'Ghi chú']];
   data.trip.expenses.forEach(function(item, index) {
     var allocation = Object.keys(item.shares || {}).map(function(memberId) { return (memberNames[memberId] || memberId) + ': ' + formatMoney_(item.shares[memberId]); }).join('\n');
     rows.push([index + 1, item.description, parseExpenseDate_(item.date), item.category || '', item.amount, item.averagePerPerson || 0, item.payerName, item.participantNames.join(', '), allocation, item.note || '']);
