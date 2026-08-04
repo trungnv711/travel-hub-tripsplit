@@ -59,6 +59,7 @@
   function escapeHtml(value) { return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;"); }
   function validEmail(value) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim()); }
   function memberName(id) { return activeTrip().members.find((member) => member.id === id)?.name || "Không xác định"; }
+  function averagePerParticipant(expense) { const count = new Set(expense.participantIds || []).size; return count ? Math.round((Number(expense.amount) || 0) / count) : 0; }
   function statusLabel(status) { return ({ planning: "Đang chuẩn bị", active: "Đang diễn ra", settling: "Đang quyết toán", closed: "Đã kết thúc" })[status] || "Đang chuẩn bị"; }
   function formatDateRange(trip) {
     if (!trip.startDate && !trip.endDate) return "Chưa đặt thời gian";
@@ -281,7 +282,7 @@
     const keyword = dom.expenseSearch.value.trim().toLocaleLowerCase("vi");
     const expenses = activeTrip().expenses.filter((e) => `${e.description} ${e.category || ""} ${e.note || ""}`.toLocaleLowerCase("vi").includes(keyword));
     dom.expenseEmpty.classList.toggle("hidden", !!expenses.length);
-    dom.expenseTableBody.innerHTML = expenses.map((e) => `<tr><td><div class="expense-main">${escapeHtml(e.description)}</div><div class="expense-sub">${escapeHtml(e.category || "Khác")}${e.note ? ` · ${escapeHtml(e.note)}` : ""}</div></td><td>${escapeHtml(formatExpenseDateTime(e.date))}</td><td><strong>${escapeHtml(memberName(e.payerId))}</strong></td><td><div class="pill-group">${e.participantIds.map((id) => `<span class="pill">${escapeHtml(memberName(id))}</span>`).join("")}</div></td><td class="align-right amount">${formatCurrency(e.amount)}</td><td><div class="row-actions"><button class="icon-button" type="button" data-edit-expense="${escapeHtml(e.id)}" title="Sửa">✎</button><button class="icon-button icon-button--danger" type="button" data-delete-expense="${escapeHtml(e.id)}" title="Xóa">🗑</button></div></td></tr>`).join("");
+    dom.expenseTableBody.innerHTML = expenses.map((e) => `<tr><td><div class="expense-main">${escapeHtml(e.description)}</div><div class="expense-sub">${escapeHtml(e.category || "Khác")}${e.note ? ` · ${escapeHtml(e.note)}` : ""}</div></td><td>${escapeHtml(formatExpenseDateTime(e.date))}</td><td><strong>${escapeHtml(memberName(e.payerId))}</strong></td><td><div class="pill-group">${e.participantIds.map((id) => `<span class="pill">${escapeHtml(memberName(id))}</span>`).join("")}</div></td><td class="align-right amount">${formatCurrency(e.amount)}</td><td class="align-right per-person"><strong>${formatCurrency(averagePerParticipant(e))}</strong><small>${e.participantIds.length} người</small></td><td><div class="row-actions"><button class="icon-button" type="button" data-edit-expense="${escapeHtml(e.id)}" title="Sửa">✎</button><button class="icon-button icon-button--danger" type="button" data-delete-expense="${escapeHtml(e.id)}" title="Xóa">🗑</button></div></td></tr>`).join("");
   }
 
   function renderSummary() {
@@ -450,11 +451,11 @@
   function buildSheetPayload() {
     const trip = activeTrip(), summary = Logic.calculateOutstandingSummary(trip.members, trip.expenses, trip.payments), settlements = Logic.calculateSettlements(trip.members, trip.expenses, trip.payments);
     const payments = trip.payments.map((payment) => ({ ...payment, fromName: memberName(payment.fromId), toName: memberName(payment.toId) }));
-    return { version: 2, trip: { id: trip.id, name: trip.name, destination: trip.destination, startDate: trip.startDate, endDate: trip.endDate, status: statusLabel(trip.status), members: trip.members, expenses: trip.expenses.map((e) => ({ ...e, payerName: memberName(e.payerId), participantNames: e.participantIds.map(memberName), shares: Logic.getExpenseShares(e) })) }, summary: trip.members.map((m) => ({ ...summary[m.id], email: m.email || "" })), settlements, payments, generatedAt: now() };
+    return { version: 2, trip: { id: trip.id, name: trip.name, destination: trip.destination, startDate: trip.startDate, endDate: trip.endDate, status: statusLabel(trip.status), members: trip.members, expenses: trip.expenses.map((e) => ({ ...e, averagePerPerson: averagePerParticipant(e), payerName: memberName(e.payerId), participantNames: e.participantIds.map(memberName), shares: Logic.getExpenseShares(e) })) }, summary: trip.members.map((m) => ({ ...summary[m.id], email: m.email || "" })), settlements, payments, generatedAt: now() };
   }
   function exportCsv() {
-    const payload = buildSheetPayload(), rows = [["CHUYẾN ĐI", payload.trip.name], ["Điểm đến", payload.trip.destination], ["Thời gian", formatDateRange(activeTrip())], [], ["CHI PHÍ"], ["Nội dung", "Ngày & giờ", "Nhóm", "Tổng tiền", "Người trả", "Người tham gia", "Cách chia", "Ghi chú"]];
-    payload.trip.expenses.forEach((e) => rows.push([e.description, e.date, e.category, e.amount, e.payerName, e.participantNames.join(", "), e.splitMode === "custom" ? "Tùy chỉnh" : "Chia đều", e.note]));
+    const payload = buildSheetPayload(), rows = [["CHUYẾN ĐI", payload.trip.name], ["Điểm đến", payload.trip.destination], ["Thời gian", formatDateRange(activeTrip())], [], ["CHI PHÍ"], ["Nội dung", "Ngày & giờ", "Nhóm", "Tổng tiền", "Bình quân/người", "Người trả", "Người tham gia", "Cách chia", "Ghi chú"]];
+    payload.trip.expenses.forEach((e) => rows.push([e.description, e.date, e.category, e.amount, e.averagePerPerson, e.payerName, e.participantNames.join(", "), e.splitMode === "custom" ? "Tùy chỉnh" : "Chia đều", e.note]));
     rows.push([], ["ĐỐI SOÁT"], ["Thành viên", "Email", "Phải chịu", "Đã ứng", "Đã chuyển", "Đã nhận", "Còn lại"]); payload.summary.forEach((r) => rows.push([r.name, r.email, r.owed, r.paid, r.transferred, r.received, r.balance]));
     rows.push([], ["CÔNG NỢ CHƯA THANH TOÁN"], ["Người cần trả", "Người cần nhận", "Số tiền", "Trạng thái"]); payload.settlements.forEach((r) => rows.push([r.fromName, r.toName, r.amount, "Chưa thanh toán"]));
     rows.push([], ["LỊCH SỬ ĐÃ THANH TOÁN"], ["Người trả", "Người nhận", "Số tiền", "Thời gian"]); payload.payments.forEach((r) => rows.push([r.fromName, r.toName, r.amount, r.paidAt]));

@@ -676,6 +676,9 @@ tbody tr:hover {
   gap: 4px;
 }
 
+.per-person strong { display: block; color: #0f766e; }
+.per-person small { display: block; margin-top: 3px; color: var(--muted); font-size: 10px; font-weight: 600; }
+
 .balance-positive {
   color: var(--success);
 }

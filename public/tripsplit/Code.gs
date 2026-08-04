@@ -99,23 +99,23 @@ function writeExpenses_(spreadsheet, data) {
   var sheet = getSheet_(spreadsheet, 'Chi phí');
   var memberNames = {};
   data.trip.members.forEach(function(member) { memberNames[member.id] = member.name; });
-  var rows = [['STT', 'Nội dung', 'Ngày & giờ', 'Nhóm', 'Tổng tiền', 'Người ứng', 'Người tham gia', 'Phân bổ chi tiết', 'Ghi chú']];
+  var rows = [['STT', 'Nội dung', 'Ngày & giờ', 'Nhóm', 'Tổng tiền', 'Bình quân/người', 'Người ứng', 'Người tham gia', 'Phân bổ chi tiết', 'Ghi chú']];
   data.trip.expenses.forEach(function(item, index) {
     var allocation = Object.keys(item.shares || {}).map(function(memberId) { return (memberNames[memberId] || memberId) + ': ' + formatMoney_(item.shares[memberId]); }).join('\n');
-    rows.push([index + 1, item.description, parseExpenseDate_(item.date), item.category || '', item.amount, item.payerName, item.participantNames.join(', '), allocation, item.note || '']);
+    rows.push([index + 1, item.description, parseExpenseDate_(item.date), item.category || '', item.amount, item.averagePerPerson || 0, item.payerName, item.participantNames.join(', '), allocation, item.note || '']);
   });
-  sheet.getRange(1, 1, rows.length, 9).setValues(rows);
-  styleSheet_(sheet, 1, 9);
+  sheet.getRange(1, 1, rows.length, 10).setValues(rows);
+  styleSheet_(sheet, 1, 10);
   if (rows.length > 1) {
     sheet.getRange(2, 3, rows.length - 1, 1).setNumberFormat('dd/MM/yyyy HH:mm');
-    sheet.getRange(2, 5, rows.length - 1, 1).setNumberFormat('#,##0 [$₫-vi-VN]');
-    sheet.getRange(1, 1, rows.length, 9).applyRowBanding(SpreadsheetApp.BandingTheme.LIGHT_GREY, true, false);
-    sheet.getRange(1, 1, 1, 9).setBackground('#1d4ed8').setFontColor('#ffffff').setFontWeight('bold');
+    sheet.getRange(2, 5, rows.length - 1, 2).setNumberFormat('#,##0 [$₫-vi-VN]');
+    sheet.getRange(1, 1, rows.length, 10).applyRowBanding(SpreadsheetApp.BandingTheme.LIGHT_GREY, true, false);
+    sheet.getRange(1, 1, 1, 10).setBackground('#1d4ed8').setFontColor('#ffffff').setFontWeight('bold');
   }
-  sheet.getRange(1, 1, rows.length, 9).createFilter();
+  sheet.getRange(1, 1, rows.length, 10).createFilter();
   sheet.setColumnWidth(2, 220);
-  sheet.setColumnWidth(7, 220);
-  sheet.setColumnWidth(8, 240);
+  sheet.setColumnWidth(8, 220);
+  sheet.setColumnWidth(9, 240);
   sheet.setTabColor('#f59e0b');
 }
 
