@@ -10,7 +10,7 @@
   const $$ = (selector) => Array.from(document.querySelectorAll(selector));
   const dom = Object.fromEntries([
     "tripSelect", "tripStatus", "tripTitle", "tripMeta", "saveStatus", "memberForm", "memberName",
-    "memberEmail", "memberError", "memberList", "btnSaveMember", "btnCancelMemberEdit", "appsScriptUrl", "appsScriptSecret", "btnShareSheet", "sheetError",
+    "memberEmail", "memberError", "memberList", "btnSaveMember", "btnCancelMemberEdit", "appsScriptUrl", "appsScriptSecret", "btnGenerateSecret", "btnShareSheet", "sheetError",
     "expenseForm", "expenseFormTitle", "expenseDescription", "expenseAmount", "expensePayer",
     "expenseDate", "expenseCategory", "expenseNote", "participantList", "customShares",
     "equalSplitPreview", "expenseError", "btnCancelEdit", "btnSaveExpense", "expenseTableBody",
@@ -35,7 +35,16 @@
     return window.crypto?.randomUUID ? `${prefix}_${crypto.randomUUID()}` : `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2)}`;
   }
   function now() { return new Date().toISOString(); }
-  function todayString() { return now().slice(0, 10); }
+  function localDateTimeString(date = new Date()) { return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16); }
+  function expenseDateTimeInput(value) { const text = String(value || ""); return /^\d{4}-\d{2}-\d{2}$/.test(text) ? `${text}T00:00` : text.slice(0, 16); }
+  function formatExpenseDateTime(value) {
+    const text = String(value || "");
+    if (!text) return "";
+    const date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(text) ? `${text}T00:00:00` : text);
+    if (Number.isNaN(date.getTime())) return text;
+    const options = text.includes("T") ? { dateStyle: "short", timeStyle: "short" } : { dateStyle: "short" };
+    return new Intl.DateTimeFormat("vi-VN", options).format(date);
+  }
   function activeTrip() { return portfolio.trips.find((trip) => trip.id === portfolio.activeTripId) || portfolio.trips[0]; }
   function formatCurrency(value) { return `${new Intl.NumberFormat("vi-VN").format(Number(value) || 0)} ₫`; }
   function formatNumber(value) { return new Intl.NumberFormat("vi-VN").format(Number(value) || 0); }
@@ -264,7 +273,7 @@
     const keyword = dom.expenseSearch.value.trim().toLocaleLowerCase("vi");
     const expenses = activeTrip().expenses.filter((e) => `${e.description} ${e.category || ""} ${e.note || ""}`.toLocaleLowerCase("vi").includes(keyword));
     dom.expenseEmpty.classList.toggle("hidden", !!expenses.length);
-    dom.expenseTableBody.innerHTML = expenses.map((e) => `<tr><td><div class="expense-main">${escapeHtml(e.description)}</div><div class="expense-sub">${escapeHtml(e.category || "Khác")}${e.note ? ` · ${escapeHtml(e.note)}` : ""}</div></td><td>${escapeHtml(e.date || "")}</td><td><strong>${escapeHtml(memberName(e.payerId))}</strong></td><td><div class="pill-group">${e.participantIds.map((id) => `<span class="pill">${escapeHtml(memberName(id))}</span>`).join("")}</div></td><td class="align-right amount">${formatCurrency(e.amount)}</td><td><div class="row-actions"><button class="icon-button" type="button" data-edit-expense="${escapeHtml(e.id)}" title="Sửa">✎</button><button class="icon-button icon-button--danger" type="button" data-delete-expense="${escapeHtml(e.id)}" title="Xóa">🗑</button></div></td></tr>`).join("");
+    dom.expenseTableBody.innerHTML = expenses.map((e) => `<tr><td><div class="expense-main">${escapeHtml(e.description)}</div><div class="expense-sub">${escapeHtml(e.category || "Khác")}${e.note ? ` · ${escapeHtml(e.note)}` : ""}</div></td><td>${escapeHtml(formatExpenseDateTime(e.date))}</td><td><strong>${escapeHtml(memberName(e.payerId))}</strong></td><td><div class="pill-group">${e.participantIds.map((id) => `<span class="pill">${escapeHtml(memberName(id))}</span>`).join("")}</div></td><td class="align-right amount">${formatCurrency(e.amount)}</td><td><div class="row-actions"><button class="icon-button" type="button" data-edit-expense="${escapeHtml(e.id)}" title="Sửa">✎</button><button class="icon-button icon-button--danger" type="button" data-delete-expense="${escapeHtml(e.id)}" title="Xóa">🗑</button></div></td></tr>`).join("");
   }
 
   function renderSummary() {
@@ -343,14 +352,14 @@
   }
 
   function resetExpenseForm() {
-    editingExpenseId = null; dom.expenseForm.reset(); dom.expenseDate.value = todayString(); dom.expenseCategory.value = "Ăn uống";
+    editingExpenseId = null; dom.expenseForm.reset(); dom.expenseDate.value = localDateTimeString(); dom.expenseCategory.value = "Ăn uống";
     dom.expenseFormTitle.textContent = "Thêm khoản chi"; dom.btnSaveExpense.textContent = "Lưu khoản chi"; dom.btnCancelEdit.classList.add("hidden"); dom.expenseError.textContent = "";
     renderPayerOptions(); renderParticipants(activeTrip().members.map((m) => m.id)); updateSplitEditor();
   }
   function beginEditExpense(id) {
     const e = activeTrip().expenses.find((item) => item.id === id); if (!e) return;
     editingExpenseId = id; dom.expenseFormTitle.textContent = "Sửa khoản chi"; dom.btnSaveExpense.textContent = "Cập nhật"; dom.btnCancelEdit.classList.remove("hidden");
-    dom.expenseDescription.value = e.description; dom.expenseAmount.value = formatNumber(e.amount); dom.expensePayer.value = e.payerId; dom.expenseDate.value = e.date || ""; dom.expenseCategory.value = e.category || "Khác"; dom.expenseNote.value = e.note || "";
+    dom.expenseDescription.value = e.description; dom.expenseAmount.value = formatNumber(e.amount); dom.expensePayer.value = e.payerId; dom.expenseDate.value = expenseDateTimeInput(e.date); dom.expenseCategory.value = e.category || "Khác"; dom.expenseNote.value = e.note || "";
     $(`input[name="splitMode"][value="${e.splitMode || "equal"}"]`).checked = true; renderParticipants(e.participantIds); updateSplitEditor();
     if (e.splitMode === "custom") Object.entries(e.customShares || {}).forEach(([id2, value]) => { const input = $(`#customShares input[data-share-member="${CSS.escape(id2)}"]`); if (input) input.value = Number(value) > 0 ? formatNumber(value) : ""; });
     updateCustomSuggestions(); dom.expenseForm.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -432,7 +441,7 @@
     return { version: 1, trip: { id: trip.id, name: trip.name, destination: trip.destination, startDate: trip.startDate, endDate: trip.endDate, status: statusLabel(trip.status), members: trip.members, expenses: trip.expenses.map((e) => ({ ...e, payerName: memberName(e.payerId), participantNames: e.participantIds.map(memberName), shares: Logic.getExpenseShares(e) })) }, summary: trip.members.map((m) => ({ ...summary[m.id], email: m.email || "" })), settlements, generatedAt: now() };
   }
   function exportCsv() {
-    const payload = buildSheetPayload(), rows = [["CHUYẾN ĐI", payload.trip.name], ["Điểm đến", payload.trip.destination], ["Thời gian", formatDateRange(activeTrip())], [], ["CHI PHÍ"], ["Nội dung", "Ngày", "Nhóm", "Tổng tiền", "Người trả", "Người tham gia", "Cách chia", "Ghi chú"]];
+    const payload = buildSheetPayload(), rows = [["CHUYẾN ĐI", payload.trip.name], ["Điểm đến", payload.trip.destination], ["Thời gian", formatDateRange(activeTrip())], [], ["CHI PHÍ"], ["Nội dung", "Ngày & giờ", "Nhóm", "Tổng tiền", "Người trả", "Người tham gia", "Cách chia", "Ghi chú"]];
     payload.trip.expenses.forEach((e) => rows.push([e.description, e.date, e.category, e.amount, e.payerName, e.participantNames.join(", "), e.splitMode === "custom" ? "Tùy chỉnh" : "Chia đều", e.note]));
     rows.push([], ["ĐỐI SOÁT"], ["Thành viên", "Email", "Phải chịu", "Đã trả", "Số dư"]); payload.summary.forEach((r) => rows.push([r.name, r.email, r.owed, r.paid, r.balance]));
     download(`${safeFilename(payload.trip.name)}.csv`, "\uFEFF" + rows.map((r) => r.map(csvCell).join(",")).join("\r\n"), "text/csv;charset=utf-8");
@@ -449,6 +458,16 @@
     const input = document.createElement("textarea"); input.name = "payload"; input.value = JSON.stringify({ ...buildSheetPayload(), secret }); form.appendChild(input); form.hidden = true; document.body.appendChild(form); form.submit(); form.remove();
     showToast("Đang tạo/cập nhật Sheet và cấp quyền thành viên…");
   }
+  async function generateAppsScriptSecret() {
+    const bytes = crypto.getRandomValues(new Uint8Array(24));
+    const secret = Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
+    dom.appsScriptSecret.value = secret;
+    localStorage.setItem(SCRIPT_SECRET_KEY, secret);
+    await copyText(secret);
+    dom.appsScriptSecret.type = "text";
+    dom.appsScriptSecret.select();
+    showToast("Đã tạo và sao chép mã bí mật. Dán mã này vào TRIPSPLIT_SECRET.");
+  }
   function importJson(file) {
     const reader = new FileReader(); reader.onload = () => { try { const candidate = JSON.parse(String(reader.result)); let next; if (Logic.validatePortfolio(candidate).valid) next = normalizePortfolio(candidate); else if (Logic.validateState(candidate).valid) next = migrateLegacy(candidate); else throw new Error("Cấu trúc dữ liệu không hợp lệ."); portfolio = next; savePortfolio("Đã khôi phục dữ liệu"); editingExpenseId = null; resetExpenseForm(); render(); showToast("Khôi phục dữ liệu thành công."); } catch (error) { showToast(`Không thể nhập file: ${error.message}`); } finally { dom.fileImportJson.value = ""; } }; reader.readAsText(file);
   }
@@ -463,12 +482,12 @@
   dom.expenseTableBody.addEventListener("click", (event) => { const edit = event.target.closest("[data-edit-expense]"), remove = event.target.closest("[data-delete-expense]"); if (edit) beginEditExpense(edit.dataset.editExpense); if (remove) { const trip = activeTrip(), e = trip.expenses.find((item) => item.id === remove.dataset.deleteExpense); if (e && confirm(`Xóa khoản “${e.description}”?`)) { trip.expenses = trip.expenses.filter((item) => item.id !== e.id); if (editingExpenseId === e.id) resetExpenseForm(); savePortfolio(); render(); } } });
   dom.expenseSearch.addEventListener("input", renderExpenses); dom.expenseAmount.addEventListener("input", () => { const value = parseMoney(dom.expenseAmount.value); dom.expenseAmount.value = value ? formatNumber(value) : ""; updateSplitEditor(); }); dom.participantList.addEventListener("change", updateSplitEditor); $$('input[name="splitMode"]').forEach((r) => r.addEventListener("change", updateSplitEditor)); dom.customShares.addEventListener("input", (event) => { const input = event.target.closest("[data-share-member]"); if (input) { if (!input.value.includes("%")) { const value = parseMoney(input.value); input.value = input.value.trim() ? formatNumber(value) : ""; } updateCustomSuggestions(); } });
   dom.btnSelectAll.addEventListener("click", () => { $$('input[name="participant"]').forEach((i) => { i.checked = true; }); updateSplitEditor(); }); dom.btnClearParticipants.addEventListener("click", () => { $$('input[name="participant"]').forEach((i) => { i.checked = false; }); updateSplitEditor(); }); dom.btnCancelEdit.addEventListener("click", resetExpenseForm);
-  dom.btnExportJson.addEventListener("click", () => download("trip-split-backup.json", JSON.stringify(portfolio, null, 2), "application/json;charset=utf-8")); dom.btnExportCsv.addEventListener("click", exportCsv); dom.fileImportJson.addEventListener("change", () => { if (dom.fileImportJson.files[0]) importJson(dom.fileImportJson.files[0]); }); dom.btnShareSheet.addEventListener("click", shareSheet); dom.appsScriptUrl.addEventListener("change", () => localStorage.setItem(SCRIPT_URL_KEY, dom.appsScriptUrl.value.trim())); dom.appsScriptSecret.addEventListener("change", () => localStorage.setItem(SCRIPT_SECRET_KEY, dom.appsScriptSecret.value.trim()));
+  dom.btnExportJson.addEventListener("click", () => download("trip-split-backup.json", JSON.stringify(portfolio, null, 2), "application/json;charset=utf-8")); dom.btnExportCsv.addEventListener("click", exportCsv); dom.fileImportJson.addEventListener("change", () => { if (dom.fileImportJson.files[0]) importJson(dom.fileImportJson.files[0]); }); dom.btnGenerateSecret.addEventListener("click", generateAppsScriptSecret); dom.btnShareSheet.addEventListener("click", shareSheet); dom.appsScriptUrl.addEventListener("change", () => localStorage.setItem(SCRIPT_URL_KEY, dom.appsScriptUrl.value.trim())); dom.appsScriptSecret.addEventListener("change", () => localStorage.setItem(SCRIPT_SECRET_KEY, dom.appsScriptSecret.value.trim()));
 
   async function initialize() {
     dom.appsScriptUrl.value = localStorage.getItem(SCRIPT_URL_KEY) || "";
     dom.appsScriptSecret.value = localStorage.getItem(SCRIPT_SECRET_KEY) || "";
-    dom.expenseDate.value = todayString();
+    dom.expenseDate.value = localDateTimeString();
     await loadSharedTripFromUrl();
     localStorage.setItem(STORAGE_KEY, JSON.stringify(portfolio));
     render();

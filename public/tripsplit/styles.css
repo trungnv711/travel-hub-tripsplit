@@ -294,6 +294,33 @@ select:focus {
 .btn--sheet { width: 100%; margin-top: 10px; background: #188038; color: #fff; }
 .btn--full { width: 100%; margin-top: 8px; }
 
+.setup-guide {
+  margin-bottom: 14px;
+  padding: 10px 11px;
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  background: #eff6ff;
+  font-size: 12px;
+}
+
+.setup-guide summary {
+  cursor: pointer;
+  color: #1d4ed8;
+  font-weight: 800;
+}
+
+.setup-guide ol {
+  margin: 10px 0 8px;
+  padding-left: 20px;
+  color: #475569;
+  line-height: 1.5;
+}
+
+.setup-guide li + li { margin-top: 6px; }
+.setup-guide a { color: #1d4ed8; font-weight: 700; }
+.setup-guide code { font-size: 11px; }
+.setup-guide__generate { margin-top: 2px; }
+
 .file-button {
   display: inline-flex;
   align-items: center;
