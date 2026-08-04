@@ -288,6 +288,46 @@
   }
 
   function selectedSplitMode() { return $('input[name="splitMode"]:checked')?.value || "equal"; }
+  function parseCustomShareEntry(rawValue, totalAmount) {
+    const text = String(rawValue ?? "").trim();
+    if (!text) return { empty: true, valid: true, amount: 0 };
+    if (text.endsWith("%")) {
+      const percentText = text.slice(0, -1).replace(/\s/g, "").replace(",", ".");
+      const percent = Number(percentText);
+      if (!Number.isFinite(percent) || percent < 0 || percent > 100) return { empty: false, valid: false, amount: 0 };
+      return { empty: false, valid: true, amount: Math.round(totalAmount * percent / 100) };
+    }
+    if (!/^\d[\d.,\s]*$/.test(text)) return { empty: false, valid: false, amount: 0 };
+    return { empty: false, valid: true, amount: parseMoney(text) };
+  }
+  function getCustomSharePlan() {
+    const amount = parseMoney(dom.expenseAmount.value);
+    const entries = $$("#customShares input[data-share-member]").map((input) => ({ id: input.dataset.shareMember, input, ...parseCustomShareEntry(input.value, amount) }));
+    const invalidEntries = entries.filter((entry) => !entry.valid);
+    const explicitTotal = entries.filter((entry) => entry.valid && !entry.empty).reduce((sum, entry) => sum + entry.amount, 0);
+    const emptyIds = entries.filter((entry) => entry.valid && entry.empty).map((entry) => entry.id);
+    const remaining = amount - explicitTotal;
+    const suggestions = remaining >= 0 ? Logic.splitEqual(remaining, emptyIds) : {};
+    const shares = Object.fromEntries(entries.map((entry) => [entry.id, entry.empty ? (suggestions[entry.id] || 0) : entry.amount]));
+    const allocatedTotal = Object.values(shares).reduce((sum, value) => sum + value, 0);
+    return { amount, entries, invalidEntries, explicitTotal, emptyIds, remaining, suggestions, shares, allocatedTotal };
+  }
+  function updateCustomSuggestions() {
+    const plan = getCustomSharePlan();
+    plan.entries.forEach((entry) => {
+      const suggestion = plan.suggestions[entry.id] || 0;
+      entry.input.placeholder = entry.empty && plan.remaining >= 0 ? `Gợi ý ${formatNumber(suggestion)} ₫` : "Nhập số tiền hoặc %";
+      entry.input.classList.toggle("custom-share-input--suggested", entry.empty && plan.remaining >= 0);
+      entry.input.classList.toggle("custom-share-input--invalid", !entry.valid);
+    });
+    const output = $("#customTotalValue");
+    if (!output) return;
+    if (plan.invalidEntries.length) output.textContent = "Có giá trị không hợp lệ";
+    else if (plan.remaining < 0) output.textContent = `Vượt ${formatCurrency(Math.abs(plan.remaining))}`;
+    else if (plan.emptyIds.length) output.textContent = `Đã nhập ${formatCurrency(plan.explicitTotal)} · tự chia còn lại ${formatCurrency(plan.remaining)} / ${formatCurrency(plan.amount)}`;
+    else output.textContent = `Đã phân bổ ${formatCurrency(plan.allocatedTotal)} / ${formatCurrency(plan.amount)}`;
+    output.classList.toggle("custom-total--error", !!plan.invalidEntries.length || plan.remaining < 0 || (!plan.emptyIds.length && plan.allocatedTotal !== plan.amount));
+  }
   function updateSplitEditor() {
     const mode = selectedSplitMode(), ids = selectedParticipantIds(), amount = parseMoney(dom.expenseAmount.value);
     dom.customShares.classList.toggle("hidden", mode !== "custom"); dom.equalSplitPreview.classList.toggle("hidden", mode !== "equal");
@@ -297,10 +337,10 @@
       dom.equalSplitPreview.textContent = min === max ? `${ids.length} người × ${formatCurrency(min)}` : `${ids.length} người, khoảng ${formatCurrency(min)}–${formatCurrency(max)} mỗi người.`;
       return;
     }
-    const old = Object.fromEntries($$("#customShares input[data-share-member]").map((i) => [i.dataset.shareMember, parseMoney(i.value)]));
-    dom.customShares.innerHTML = ids.map((id) => `<div class="custom-share-row"><label>${escapeHtml(memberName(id))}</label><input type="text" inputmode="numeric" data-share-member="${escapeHtml(id)}" value="${old[id] ? formatNumber(old[id]) : ""}" placeholder="0" /></div>`).join("") + `<div class="custom-total">Đã nhập: <span id="customTotalValue">${formatCurrency(Object.values(old).reduce((a, b) => a + b, 0))}</span> / ${formatCurrency(amount)}</div>`;
+    const old = Object.fromEntries($$("#customShares input[data-share-member]").map((input) => [input.dataset.shareMember, input.value]));
+    dom.customShares.innerHTML = `<p class="custom-guide">Nhập số tiền như <strong>800.000</strong> hoặc tỷ lệ như <strong>80%</strong>. Các ô trống sẽ tự chia đều phần còn lại.</p>` + ids.map((id) => `<div class="custom-share-row"><label>${escapeHtml(memberName(id))}</label><input type="text" inputmode="decimal" data-share-member="${escapeHtml(id)}" value="${escapeHtml(old[id] || "")}" aria-label="Phần chi phí của ${escapeHtml(memberName(id))}" /></div>`).join("") + `<div class="custom-total"><span id="customTotalValue">${formatCurrency(amount)}</span></div>`;
+    updateCustomSuggestions();
   }
-  function updateCustomTotal() { const output = $("#customTotalValue"); if (output) output.textContent = formatCurrency($$("#customShares input[data-share-member]").reduce((sum, i) => sum + parseMoney(i.value), 0)); }
 
   function resetExpenseForm() {
     editingExpenseId = null; dom.expenseForm.reset(); dom.expenseDate.value = todayString(); dom.expenseCategory.value = "Ăn uống";
@@ -312,14 +352,20 @@
     editingExpenseId = id; dom.expenseFormTitle.textContent = "Sửa khoản chi"; dom.btnSaveExpense.textContent = "Cập nhật"; dom.btnCancelEdit.classList.remove("hidden");
     dom.expenseDescription.value = e.description; dom.expenseAmount.value = formatNumber(e.amount); dom.expensePayer.value = e.payerId; dom.expenseDate.value = e.date || ""; dom.expenseCategory.value = e.category || "Khác"; dom.expenseNote.value = e.note || "";
     $(`input[name="splitMode"][value="${e.splitMode || "equal"}"]`).checked = true; renderParticipants(e.participantIds); updateSplitEditor();
-    if (e.splitMode === "custom") Object.entries(e.customShares || {}).forEach(([id2, value]) => { const input = $(`#customShares input[data-share-member="${CSS.escape(id2)}"]`); if (input) input.value = formatNumber(value); });
-    updateCustomTotal(); dom.expenseForm.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (e.splitMode === "custom") Object.entries(e.customShares || {}).forEach(([id2, value]) => { const input = $(`#customShares input[data-share-member="${CSS.escape(id2)}"]`); if (input) input.value = Number(value) > 0 ? formatNumber(value) : ""; });
+    updateCustomSuggestions(); dom.expenseForm.scrollIntoView({ behavior: "smooth", block: "start" });
   }
   function validateExpense() {
     const data = { description: dom.expenseDescription.value.trim(), amount: parseMoney(dom.expenseAmount.value), payerId: dom.expensePayer.value, participantIds: selectedParticipantIds(), splitMode: selectedSplitMode(), customShares: {}, date: dom.expenseDate.value, category: dom.expenseCategory.value, note: dom.expenseNote.value.trim() };
     if (!data.description) return { message: "Vui lòng nhập nội dung khoản chi." }; if (!data.amount) return { message: "Tổng tiền phải lớn hơn 0." };
     if (!activeTrip().members.some((m) => m.id === data.payerId)) return { message: "Vui lòng chọn người trả." }; if (!data.participantIds.length) return { message: "Chọn ít nhất một người tham gia." };
-    if (data.splitMode === "custom") { $$("#customShares input[data-share-member]").forEach((i) => { data.customShares[i.dataset.shareMember] = parseMoney(i.value); }); const total = Object.values(data.customShares).reduce((a, b) => a + b, 0); if (total !== data.amount) return { message: `Tổng phần chia ${formatCurrency(total)} phải bằng ${formatCurrency(data.amount)}.` }; }
+    if (data.splitMode === "custom") {
+      const plan = getCustomSharePlan();
+      if (plan.invalidEntries.length) return { message: "Chỉ nhập số tiền hoặc tỷ lệ từ 0% đến 100%." };
+      if (plan.remaining < 0) return { message: `Phần đã nhập vượt tổng tiền ${formatCurrency(Math.abs(plan.remaining))}.` };
+      if (!plan.emptyIds.length && plan.allocatedTotal !== data.amount) return { message: `Tổng phần chia ${formatCurrency(plan.allocatedTotal)} phải bằng ${formatCurrency(data.amount)}.` };
+      data.customShares = plan.shares;
+    }
     return { data };
   }
 
@@ -415,7 +461,7 @@
   dom.memberForm.addEventListener("submit", (event) => { event.preventDefault(); saveMember(); }); dom.btnCancelMemberEdit.addEventListener("click", () => { resetMemberForm(); renderMembers(); }); dom.memberList.addEventListener("click", (event) => { const editButton = event.target.closest("[data-edit-member]"), removeButton = event.target.closest("[data-remove-member]"); if (editButton) beginEditMember(editButton.dataset.editMember); if (removeButton) removeMember(removeButton.dataset.removeMember); });
   dom.expenseForm.addEventListener("submit", (event) => { event.preventDefault(); const result = validateExpense(); if (result.message) { dom.expenseError.textContent = result.message; return; } const trip = activeTrip(); if (editingExpenseId) { const index = trip.expenses.findIndex((e) => e.id === editingExpenseId); trip.expenses[index] = { ...trip.expenses[index], ...result.data, updatedAt: now() }; showToast("Đã cập nhật khoản chi."); } else { trip.expenses.unshift({ id: uid("expense"), ...result.data, createdAt: now() }); showToast("Đã thêm khoản chi."); } savePortfolio(); resetExpenseForm(); render(); });
   dom.expenseTableBody.addEventListener("click", (event) => { const edit = event.target.closest("[data-edit-expense]"), remove = event.target.closest("[data-delete-expense]"); if (edit) beginEditExpense(edit.dataset.editExpense); if (remove) { const trip = activeTrip(), e = trip.expenses.find((item) => item.id === remove.dataset.deleteExpense); if (e && confirm(`Xóa khoản “${e.description}”?`)) { trip.expenses = trip.expenses.filter((item) => item.id !== e.id); if (editingExpenseId === e.id) resetExpenseForm(); savePortfolio(); render(); } } });
-  dom.expenseSearch.addEventListener("input", renderExpenses); dom.expenseAmount.addEventListener("input", () => { const value = parseMoney(dom.expenseAmount.value); dom.expenseAmount.value = value ? formatNumber(value) : ""; updateSplitEditor(); }); dom.participantList.addEventListener("change", updateSplitEditor); $$('input[name="splitMode"]').forEach((r) => r.addEventListener("change", updateSplitEditor)); dom.customShares.addEventListener("input", (event) => { const input = event.target.closest("[data-share-member]"); if (input) { const value = parseMoney(input.value); input.value = value ? formatNumber(value) : ""; updateCustomTotal(); } });
+  dom.expenseSearch.addEventListener("input", renderExpenses); dom.expenseAmount.addEventListener("input", () => { const value = parseMoney(dom.expenseAmount.value); dom.expenseAmount.value = value ? formatNumber(value) : ""; updateSplitEditor(); }); dom.participantList.addEventListener("change", updateSplitEditor); $$('input[name="splitMode"]').forEach((r) => r.addEventListener("change", updateSplitEditor)); dom.customShares.addEventListener("input", (event) => { const input = event.target.closest("[data-share-member]"); if (input) { if (!input.value.includes("%")) { const value = parseMoney(input.value); input.value = input.value.trim() ? formatNumber(value) : ""; } updateCustomSuggestions(); } });
   dom.btnSelectAll.addEventListener("click", () => { $$('input[name="participant"]').forEach((i) => { i.checked = true; }); updateSplitEditor(); }); dom.btnClearParticipants.addEventListener("click", () => { $$('input[name="participant"]').forEach((i) => { i.checked = false; }); updateSplitEditor(); }); dom.btnCancelEdit.addEventListener("click", resetExpenseForm);
   dom.btnExportJson.addEventListener("click", () => download("trip-split-backup.json", JSON.stringify(portfolio, null, 2), "application/json;charset=utf-8")); dom.btnExportCsv.addEventListener("click", exportCsv); dom.fileImportJson.addEventListener("change", () => { if (dom.fileImportJson.files[0]) importJson(dom.fileImportJson.files[0]); }); dom.btnShareSheet.addEventListener("click", shareSheet); dom.appsScriptUrl.addEventListener("change", () => localStorage.setItem(SCRIPT_URL_KEY, dom.appsScriptUrl.value.trim())); dom.appsScriptSecret.addEventListener("change", () => localStorage.setItem(SCRIPT_SECRET_KEY, dom.appsScriptSecret.value.trim()));
 

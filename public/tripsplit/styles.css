@@ -521,6 +521,31 @@ legend span {
   text-align: right;
 }
 
+.custom-share-row input::placeholder {
+  color: #0f766e;
+  font-size: 12px;
+  font-weight: 650;
+  opacity: 1;
+}
+
+.custom-share-input--suggested {
+  border-color: #99f6e4;
+  background: #f0fdfa;
+}
+
+.custom-share-input--invalid { border-color: #fca5a5; }
+
+.custom-guide {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 9px 11px;
+  border-radius: 9px;
+  background: #f0fdfa;
+  color: #115e59;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .custom-total {
   grid-column: 1 / -1;
   display: flex;
@@ -530,6 +555,8 @@ legend span {
   font-size: 13px;
   font-weight: 700;
 }
+
+.custom-total--error { color: #b91c1c; }
 
 .form-error,
 .field-error {
