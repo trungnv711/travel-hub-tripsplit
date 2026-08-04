@@ -15,7 +15,7 @@
     "expenseDate", "expenseCategory", "expenseNote", "participantList", "customShares",
     "equalSplitPreview", "expenseError", "btnCancelEdit", "btnSaveExpense", "expenseTableBody",
     "expenseEmpty", "expenseSearch", "summaryTableBody", "settlementList", "statTotal",
-    "statExpenseCount", "statMemberCount", "statTransferCount", "toast", "btnNewTrip", "btnEditTrip",
+    "statExpenseCount", "statMemberCount", "statTransferCount", "toast", "btnNewTrip", "btnShareTrip", "btnEditTrip",
     "btnDeleteTrip", "btnExportJson", "btnExportCsv", "fileImportJson", "btnSelectAll",
     "btnClearParticipants", "tripDialog", "tripForm", "tripDialogTitle", "tripId", "tripName",
     "tripDestination", "tripStartDate", "tripEndDate", "tripStatusInput", "tripError",
@@ -26,6 +26,9 @@
   let editingExpenseId = null;
   let editingMemberId = null;
   let toastTimer = null;
+  let remoteSyncTimer = null;
+  let isApplyingSharedTrip = false;
+  const SHARE_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
   function uid(prefix) {
     return window.crypto?.randomUUID ? `${prefix}_${crypto.randomUUID()}` : `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2)}`;
@@ -86,14 +89,102 @@
     return createSamplePortfolio();
   }
 
-  function savePortfolio(message = "Đã lưu trên trình duyệt") {
+  function savePortfolio(message = "Đã lưu trên thiết bị") {
     activeTrip().updatedAt = now();
     localStorage.setItem(STORAGE_KEY, JSON.stringify(portfolio));
     dom.saveStatus.textContent = message;
     clearTimeout(savePortfolio.timer);
-    savePortfolio.timer = setTimeout(() => { dom.saveStatus.textContent = "Đã lưu trên trình duyệt"; }, 1500);
+    savePortfolio.timer = setTimeout(() => { dom.saveStatus.textContent = activeTrip().shareId ? "Đã đồng bộ cho cả nhóm" : "Đã lưu trên thiết bị"; }, 1500);
+    if (!isApplyingSharedTrip && activeTrip().shareId) scheduleRemoteSync();
   }
   function showToast(message) { dom.toast.textContent = message; dom.toast.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(() => dom.toast.classList.remove("show"), 2600); }
+
+  function shareIdFromUrl() {
+    return new URLSearchParams(window.location.search).get("trip") || "";
+  }
+  function sharedUrl(shareId) {
+    let origin = window.location.origin;
+    try { if (window.parent !== window) origin = window.parent.location.origin; } catch { /* use iframe origin */ }
+    return `${origin}/?trip=${encodeURIComponent(shareId)}`;
+  }
+  function setSharedUrl(shareId) {
+    const outerUrl = shareId ? sharedUrl(shareId) : `${window.location.origin}/`;
+    try { if (window.parent !== window) window.parent.history.replaceState({}, "", outerUrl); } catch { /* parent may be unavailable */ }
+    history.replaceState({}, "", shareId ? `${location.pathname}?trip=${encodeURIComponent(shareId)}` : location.pathname);
+    return outerUrl;
+  }
+  async function copyText(value) {
+    try { await navigator.clipboard.writeText(value); return true; } catch { /* use fallback */ }
+    const input = document.createElement("textarea"); input.value = value; input.style.position = "fixed"; input.style.opacity = "0"; document.body.appendChild(input); input.select();
+    const copied = document.execCommand("copy"); input.remove(); return copied;
+  }
+  function scheduleRemoteSync() {
+    clearTimeout(remoteSyncTimer);
+    remoteSyncTimer = setTimeout(() => syncSharedTrip().catch(() => {}), 700);
+  }
+  async function syncSharedTrip() {
+    const trip = activeTrip();
+    if (!trip.shareId || location.protocol === "file:") return;
+    clearTimeout(savePortfolio.timer);
+    dom.saveStatus.textContent = "Đang đồng bộ…";
+    const response = await fetch(`/api/shared-trips/${encodeURIComponent(trip.shareId)}`, {
+      method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ trip })
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      dom.saveStatus.textContent = "Đã lưu trên thiết bị · chờ đồng bộ";
+      throw new Error(result.error || "Không thể đồng bộ chuyến đi.");
+    }
+    trip.shareRevision = result.revision;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(portfolio));
+    dom.saveStatus.textContent = "Đã đồng bộ cho cả nhóm";
+  }
+  async function shareCurrentTrip() {
+    if (location.protocol === "file:") { showToast("Chức năng chia sẻ chỉ có trên bản online."); return; }
+    const trip = activeTrip();
+    dom.btnShareTrip.disabled = true;
+    try {
+      if (!trip.shareId) {
+        dom.saveStatus.textContent = "Đang tạo link chia sẻ…";
+        const response = await fetch("/api/shared-trips", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ trip }) });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || "Không thể tạo link chia sẻ.");
+        trip.shareId = result.shareId; trip.shareRevision = result.revision;
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(portfolio));
+      } else {
+        await syncSharedTrip();
+      }
+      const url = setSharedUrl(trip.shareId);
+      const copied = await copyText(url);
+      render();
+      showToast(copied ? "Đã sao chép link trip. Gửi link này cho cả nhóm." : `Link trip: ${url}`);
+    } catch (error) {
+      dom.saveStatus.textContent = "Đã lưu trên thiết bị";
+      showToast(error instanceof Error ? error.message : "Không thể chia sẻ chuyến đi.");
+    } finally { dom.btnShareTrip.disabled = false; }
+  }
+  async function loadSharedTripFromUrl() {
+    const shareId = shareIdFromUrl();
+    if (!shareId) return;
+    if (!SHARE_ID_PATTERN.test(shareId)) { showToast("Link trip không hợp lệ."); return; }
+    dom.saveStatus.textContent = "Đang tải dữ liệu chung…";
+    try {
+      const response = await fetch(`/api/shared-trips/${encodeURIComponent(shareId)}`);
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "Không thể tải chuyến đi.");
+      if (!Logic.validateTrip(result.trip).valid) throw new Error("Dữ liệu chuyến đi trên máy chủ không hợp lệ.");
+      const sharedTrip = { ...result.trip, shareId, shareRevision: result.revision };
+      isApplyingSharedTrip = true;
+      const index = portfolio.trips.findIndex((trip) => trip.shareId === shareId || trip.id === sharedTrip.id);
+      if (index >= 0) portfolio.trips[index] = sharedTrip; else portfolio.trips.unshift(sharedTrip);
+      portfolio.activeTripId = sharedTrip.id;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(portfolio));
+      dom.saveStatus.textContent = "Đã tải dữ liệu chung";
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Không thể tải chuyến đi.");
+      dom.saveStatus.textContent = "Không tải được dữ liệu chung";
+    } finally { isApplyingSharedTrip = false; }
+  }
 
   function render() {
     const trip = activeTrip();
@@ -104,6 +195,7 @@
     dom.tripStatus.dataset.status = trip.status;
     dom.tripTitle.textContent = trip.name;
     dom.tripMeta.textContent = [trip.destination || "Chưa có điểm đến", formatDateRange(trip), `${trip.members.length} thành viên`].join(" · ");
+    dom.btnShareTrip.textContent = trip.shareId ? "🔗 Sao chép link trip" : "🔗 Chia sẻ trip";
     renderMembers(); renderPayerOptions(); renderParticipants(); renderExpenses(); renderSummary(); renderStats(); updateSplitEditor();
   }
 
@@ -276,9 +368,10 @@
     const reader = new FileReader(); reader.onload = () => { try { const candidate = JSON.parse(String(reader.result)); let next; if (Logic.validatePortfolio(candidate).valid) next = normalizePortfolio(candidate); else if (Logic.validateState(candidate).valid) next = migrateLegacy(candidate); else throw new Error("Cấu trúc dữ liệu không hợp lệ."); portfolio = next; savePortfolio("Đã khôi phục dữ liệu"); editingExpenseId = null; resetExpenseForm(); render(); showToast("Khôi phục dữ liệu thành công."); } catch (error) { showToast(`Không thể nhập file: ${error.message}`); } finally { dom.fileImportJson.value = ""; } }; reader.readAsText(file);
   }
 
-  dom.tripSelect.addEventListener("change", () => { portfolio.activeTripId = dom.tripSelect.value; editingExpenseId = null; resetMemberForm(); savePortfolio(); resetExpenseForm(); render(); });
+  dom.tripSelect.addEventListener("change", () => { portfolio.activeTripId = dom.tripSelect.value; editingExpenseId = null; resetMemberForm(); savePortfolio(); resetExpenseForm(); render(); setSharedUrl(activeTrip().shareId || ""); });
   dom.btnNewTrip.addEventListener("click", () => openTripDialog()); dom.btnEditTrip.addEventListener("click", () => openTripDialog(activeTrip()));
-  dom.btnDeleteTrip.addEventListener("click", () => { if (portfolio.trips.length === 1) { showToast("Cần giữ lại ít nhất một chuyến đi."); return; } const trip = activeTrip(); if (!confirm(`Xóa toàn bộ dữ liệu của “${trip.name}”? Hành động này không thể hoàn tác.`)) return; portfolio.trips = portfolio.trips.filter((t) => t.id !== trip.id); portfolio.activeTripId = portfolio.trips[0].id; resetMemberForm(); savePortfolio(); resetExpenseForm(); render(); showToast("Đã xóa chuyến đi."); });
+  dom.btnShareTrip.addEventListener("click", shareCurrentTrip);
+  dom.btnDeleteTrip.addEventListener("click", () => { if (portfolio.trips.length === 1) { showToast("Cần giữ lại ít nhất một chuyến đi."); return; } const trip = activeTrip(); if (!confirm(`Xóa toàn bộ dữ liệu của “${trip.name}” khỏi thiết bị này?`)) return; portfolio.trips = portfolio.trips.filter((t) => t.id !== trip.id); portfolio.activeTripId = portfolio.trips[0].id; resetMemberForm(); savePortfolio(); resetExpenseForm(); render(); setSharedUrl(activeTrip().shareId || ""); showToast("Đã xóa chuyến đi khỏi thiết bị này."); });
   dom.tripForm.addEventListener("submit", (event) => { event.preventDefault(); saveTripFromDialog(); }); [dom.btnCloseTripDialog, dom.btnCancelTrip].forEach((button) => button.addEventListener("click", () => dom.tripDialog.close()));
   dom.memberForm.addEventListener("submit", (event) => { event.preventDefault(); saveMember(); }); dom.btnCancelMemberEdit.addEventListener("click", () => { resetMemberForm(); renderMembers(); }); dom.memberList.addEventListener("click", (event) => { const editButton = event.target.closest("[data-edit-member]"), removeButton = event.target.closest("[data-remove-member]"); if (editButton) beginEditMember(editButton.dataset.editMember); if (removeButton) removeMember(removeButton.dataset.removeMember); });
   dom.expenseForm.addEventListener("submit", (event) => { event.preventDefault(); const result = validateExpense(); if (result.message) { dom.expenseError.textContent = result.message; return; } const trip = activeTrip(); if (editingExpenseId) { const index = trip.expenses.findIndex((e) => e.id === editingExpenseId); trip.expenses[index] = { ...trip.expenses[index], ...result.data, updatedAt: now() }; showToast("Đã cập nhật khoản chi."); } else { trip.expenses.unshift({ id: uid("expense"), ...result.data, createdAt: now() }); showToast("Đã thêm khoản chi."); } savePortfolio(); resetExpenseForm(); render(); });
@@ -287,5 +380,13 @@
   dom.btnSelectAll.addEventListener("click", () => { $$('input[name="participant"]').forEach((i) => { i.checked = true; }); updateSplitEditor(); }); dom.btnClearParticipants.addEventListener("click", () => { $$('input[name="participant"]').forEach((i) => { i.checked = false; }); updateSplitEditor(); }); dom.btnCancelEdit.addEventListener("click", resetExpenseForm);
   dom.btnExportJson.addEventListener("click", () => download("trip-split-backup.json", JSON.stringify(portfolio, null, 2), "application/json;charset=utf-8")); dom.btnExportCsv.addEventListener("click", exportCsv); dom.fileImportJson.addEventListener("change", () => { if (dom.fileImportJson.files[0]) importJson(dom.fileImportJson.files[0]); }); dom.btnShareSheet.addEventListener("click", shareSheet); dom.appsScriptUrl.addEventListener("change", () => localStorage.setItem(SCRIPT_URL_KEY, dom.appsScriptUrl.value.trim())); dom.appsScriptSecret.addEventListener("change", () => localStorage.setItem(SCRIPT_SECRET_KEY, dom.appsScriptSecret.value.trim()));
 
-  dom.appsScriptUrl.value = localStorage.getItem(SCRIPT_URL_KEY) || ""; dom.appsScriptSecret.value = localStorage.getItem(SCRIPT_SECRET_KEY) || ""; dom.expenseDate.value = todayString(); savePortfolio(); render();
+  async function initialize() {
+    dom.appsScriptUrl.value = localStorage.getItem(SCRIPT_URL_KEY) || "";
+    dom.appsScriptSecret.value = localStorage.getItem(SCRIPT_SECRET_KEY) || "";
+    dom.expenseDate.value = todayString();
+    await loadSharedTripFromUrl();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(portfolio));
+    render();
+  }
+  initialize();
 })();

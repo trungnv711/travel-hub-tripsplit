@@ -271,6 +271,14 @@ select:focus {
   filter: brightness(0.96);
 }
 
+.btn--share {
+  background: #0f766e;
+  color: #fff;
+}
+
+.btn--share:hover { background: #115e59; }
+.btn:disabled { cursor: wait; opacity: 0.65; }
+
 .btn--ghost {
   background: white;
   border-color: var(--line);
