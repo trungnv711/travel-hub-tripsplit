@@ -19,7 +19,8 @@
     "btnDeleteTrip", "btnExportJson", "btnExportCsv", "fileImportJson", "btnSelectAll",
     "btnClearParticipants", "tripDialog", "tripForm", "tripDialogTitle", "tripId", "tripName",
     "tripDestination", "tripStartDate", "tripEndDate", "tripStatusInput", "tripError",
-    "btnCloseTripDialog", "btnCancelTrip"
+    "btnCloseTripDialog", "btnCancelTrip", "accountBox", "accountName", "accountEmail",
+    "btnSignIn", "btnSignOut"
   ].map((id) => [id, document.getElementById(id)]));
 
   let portfolio = loadPortfolio();
@@ -29,6 +30,7 @@
   const remoteSyncTimers = new Map();
   const shareCreationPromises = new Map();
   let isApplyingSharedTrip = false;
+  let account = null;
   const SHARE_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
   function uid(prefix) {
@@ -135,6 +137,53 @@
     try { if (window.parent !== window) window.parent.history.replaceState({}, "", outerUrl); } catch { /* parent may be unavailable */ }
     history.replaceState({}, "", shareId ? `${location.pathname}?trip=${encodeURIComponent(shareId)}` : location.pathname);
     return outerUrl;
+  }
+  function accountReturnPath() {
+    const shareId = activeTrip()?.shareId || shareIdFromUrl();
+    return shareId ? `/?trip=${encodeURIComponent(shareId)}` : "/";
+  }
+  function renderAccount() {
+    const returnTo = encodeURIComponent(accountReturnPath());
+    dom.btnSignIn.href = `/signin-with-chatgpt?return_to=${returnTo}`;
+    dom.btnSignOut.href = `/signout-with-chatgpt?return_to=${returnTo}`;
+    if (account?.authenticated) {
+      dom.accountName.textContent = account.user.displayName || "Tài khoản TripSplit";
+      dom.accountEmail.textContent = `${account.user.email} · Đã lưu đám mây`;
+      dom.btnSignIn.classList.add("hidden");
+      dom.btnSignOut.classList.remove("hidden");
+    } else {
+      dom.accountName.textContent = "Chế độ khách";
+      dom.accountEmail.textContent = "Đăng nhập để lưu trên mọi thiết bị";
+      dom.btnSignIn.classList.remove("hidden");
+      dom.btnSignOut.classList.add("hidden");
+    }
+  }
+  async function loadAccountTrips() {
+    try {
+      const meResponse = await fetch("/api/me", { cache: "no-store" });
+      account = meResponse.ok ? await meResponse.json() : { authenticated: false };
+      renderAccount();
+      if (!account.authenticated) return;
+
+      const tripsResponse = await fetch("/api/account/trips", { cache: "no-store" });
+      if (!tripsResponse.ok) return;
+      const result = await tripsResponse.json();
+      const accountTrips = Array.isArray(result.trips)
+        ? result.trips.filter((trip) => Logic.validateTrip(trip).valid)
+        : [];
+      accountTrips.forEach((trip) => {
+        trip.payments ||= [];
+        trip.members.forEach((member) => { member.email ||= ""; });
+        const index = portfolio.trips.findIndex((item) => item.shareId === trip.shareId || item.id === trip.id);
+        if (index >= 0) portfolio.trips[index] = trip;
+        else portfolio.trips.push(trip);
+      });
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(portfolio));
+      if (accountTrips.length) dom.saveStatus.textContent = `Đã tải ${accountTrips.length} trip từ tài khoản`;
+    } catch {
+      account = { authenticated: false };
+      renderAccount();
+    }
   }
   async function copyText(value) {
     try { await navigator.clipboard.writeText(value); return true; } catch { /* use fallback */ }
@@ -253,7 +302,7 @@
     dom.tripTitle.textContent = trip.name;
     dom.tripMeta.textContent = [trip.destination || "Chưa có điểm đến", formatDateRange(trip), `${trip.members.length} thành viên`].join(" · ");
     dom.btnShareTrip.textContent = trip.shareId ? "🔗 Sao chép link trip" : "🔗 Chia sẻ trip";
-    renderMembers(); renderPayerOptions(); renderParticipants(); renderExpenses(); renderSummary(); renderStats(); updateSplitEditor();
+    renderMembers(); renderPayerOptions(); renderParticipants(); renderExpenses(); renderSummary(); renderStats(); updateSplitEditor(); renderAccount();
   }
 
   function renderMembers() {
@@ -517,6 +566,7 @@
     dom.appsScriptUrl.value = localStorage.getItem(SCRIPT_URL_KEY) || "";
     dom.appsScriptSecret.value = localStorage.getItem(SCRIPT_SECRET_KEY) || "";
     dom.expenseDate.value = localDateString();
+    await loadAccountTrips();
     await loadSharedTripFromUrl();
     localStorage.setItem(STORAGE_KEY, JSON.stringify(portfolio));
     render();

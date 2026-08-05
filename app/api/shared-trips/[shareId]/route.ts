@@ -1,6 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { getDb } from "../../../../db";
-import { sharedTrips } from "../../../../db/schema";
+import { sharedTrips, tripHistory } from "../../../../db/schema";
+import { getChatGPTUser } from "../../../chatgpt-auth";
 
 const SHARE_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_TRIP_BYTES = 750_000;
@@ -21,6 +22,7 @@ function validateTrip(trip: unknown): trip is Record<string, unknown> {
 
 export async function GET(_request: Request, context: RouteContext) {
   try {
+    const user = await getChatGPTUser();
     const { shareId } = await context.params;
     if (!SHARE_ID_PATTERN.test(shareId)) {
       return Response.json({ error: "Link chia sẻ không hợp lệ." }, { status: 400 });
@@ -37,6 +39,7 @@ export async function GET(_request: Request, context: RouteContext) {
       shareId: record.shareId,
       revision: record.revision,
       updatedAt: record.updatedAt,
+      isOwner: Boolean(user && record.ownerId === user.userId),
       trip: JSON.parse(record.tripData),
     });
   } catch (error) {
@@ -47,6 +50,7 @@ export async function GET(_request: Request, context: RouteContext) {
 
 export async function PUT(request: Request, context: RouteContext) {
   try {
+    const user = await getChatGPTUser();
     const { shareId } = await context.params;
     if (!SHARE_ID_PATTERN.test(shareId)) {
       return Response.json({ error: "Link chia sẻ không hợp lệ." }, { status: 400 });
@@ -73,7 +77,16 @@ export async function PUT(request: Request, context: RouteContext) {
       .returning({ shareId: sharedTrips.shareId, revision: sharedTrips.revision, updatedAt: sharedTrips.updatedAt });
 
     if (!record) return Response.json({ error: "Không tìm thấy chuyến đi." }, { status: 404 });
-    return Response.json(record);
+    await getDb().insert(tripHistory).values({
+      id: crypto.randomUUID(),
+      shareId,
+      revision: record.revision,
+      actorId: user?.userId ?? null,
+      actorEmail: user?.email ?? null,
+      action: "updated",
+      tripData,
+    });
+    return Response.json({ ...record, savedToAccount: Boolean(user) });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Không thể đồng bộ chuyến đi.";
     return Response.json({ error: message }, { status: 500 });

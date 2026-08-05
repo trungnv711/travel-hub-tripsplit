@@ -2,106 +2,212 @@
 <html lang="vi">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#ffffff" />
   <meta name="description" content="Quản lý và chia chi phí cho nhiều chuyến đi, xuất và chia sẻ Google Sheet." />
-  <title>TripSplit — Quản lý nhiều chuyến đi</title>
-  <link rel="stylesheet" href="styles.css?v=9" />
+  <title>TripSplit — Chia chi phí nhóm</title>
+  <link rel="stylesheet" href="styles.css?v=11" />
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand"><div class="brand__icon">✈️</div><div><h1>TripSplit</h1><p>Nhiều chuyến đi, một nơi đối soát</p></div></div>
-    <div class="topbar__actions">
-      <button id="btnNewTrip" class="btn btn--primary">+ Chuyến đi mới</button>
-      <button id="btnShareTrip" class="btn btn--share" type="button">🔗 Chia sẻ trip</button>
-      <button id="btnExportJson" class="btn btn--ghost">Sao lưu JSON</button>
-      <label class="btn btn--ghost file-button">Khôi phục JSON<input id="fileImportJson" type="file" accept=".json,application/json" hidden /></label>
+  <header class="appbar">
+    <div class="brand">
+      <div class="brand__icon">✈️</div>
+      <div class="brand__text">
+        <h1>TripSplit</h1>
+        <p>Chia chi phí nhóm, rõ ràng</p>
+      </div>
+    </div>
+    <div class="appbar__trip">
+      <div class="trip-select">
+        <label for="tripSelect">Chuyến đi</label>
+        <select id="tripSelect" aria-label="Chọn chuyến đi"></select>
+      </div>
+      <button id="btnNewTrip" class="btn btn--primary" type="button"><span class="btn__plus" aria-hidden="true">+</span> Chuyến đi mới</button>
+      <div class="account-box" id="accountBox" aria-live="polite">
+        <div class="account-box__copy">
+          <strong id="accountName">Chế độ khách</strong>
+          <span id="accountEmail">Đăng nhập để lưu trên mọi thiết bị</span>
+        </div>
+        <a id="btnSignIn" class="btn btn--soft" href="/signin-with-chatgpt?return_to=%2F" target="_top">Đăng nhập</a>
+        <a id="btnSignOut" class="btn btn--soft hidden" href="/signout-with-chatgpt?return_to=%2F" target="_top">Đăng xuất</a>
+      </div>
     </div>
   </header>
 
-  <main class="container">
-    <section class="trip-switcher card">
-      <div class="field trip-picker"><label for="tripSelect">Chuyến đi đang theo dõi</label><select id="tripSelect"></select></div>
-      <div class="trip-switcher__actions">
-        <button id="btnEditTrip" class="btn btn--ghost">Sửa thông tin</button>
-        <button id="btnDeleteTrip" class="btn btn--danger-ghost">Xóa chuyến đi</button>
+  <main class="app">
+    <section class="trip-bar card">
+      <div class="trip-bar__info">
+        <span class="status-chip" id="tripStatus" data-status="planning">Đang chuẩn bị</span>
+        <h2 id="tripTitle">Chuyến đi</h2>
+        <p id="tripMeta" class="trip-bar__meta"></p>
+      </div>
+      <div class="trip-bar__aside">
+        <span class="save-status" id="saveStatus">Đã lưu trên thiết bị</span>
+        <div class="trip-bar__actions">
+          <button id="btnShareTrip" class="btn btn--soft" type="button">🔗 Chia sẻ trip</button>
+          <button id="btnEditTrip" class="btn btn--soft" type="button">Sửa</button>
+          <button id="btnDeleteTrip" class="btn btn--soft btn--danger" type="button">Xóa</button>
+        </div>
       </div>
     </section>
 
-    <section class="trip-heading card">
-      <div><div class="eyebrow" id="tripStatus">Đang chuẩn bị</div><h2 id="tripTitle">Chuyến đi</h2><p id="tripMeta" class="trip-meta"></p></div>
-      <div class="save-status" id="saveStatus">Đã lưu trên thiết bị</div>
+    <nav class="tabs" role="tablist" aria-label="Khu vực làm việc">
+      <button class="tab is-active" type="button" role="tab" data-tab="overview" aria-selected="true">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13h6V4H4v9Zm0 7h6v-5H4v5Zm8 0h6V11h-6v9Zm0-16v5h6V4h-6Z"/></svg>
+        <span>Tổng quan</span>
+      </button>
+      <button class="tab" type="button" role="tab" data-tab="expenses" aria-selected="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6Zm2 0v3h14V6H5Zm0 5v7h14v-7H5Zm2 2h5v2H7v-2Z"/></svg>
+        <span>Chi phí</span>
+      </button>
+      <button class="tab" type="button" role="tab" data-tab="members" aria-selected="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 11a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm-8 1a3 3 0 1 0-3-3 3 3 0 0 0 3 3Zm0 2c-2.7 0-6 1.34-6 4v2h7v-2c0-1.1.44-2.07 1.17-2.83A9.6 9.6 0 0 0 8 14Zm8 0c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4Z"/></svg>
+        <span>Thành viên</span>
+      </button>
+      <button class="tab" type="button" role="tab" data-tab="share" aria-selected="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 16.08a3 3 0 0 0-2.05.82l-6.9-4a3 3 0 0 0 0-1.8l6.83-3.98A3 3 0 1 0 15 5a3 3 0 0 0 .1.75L8.28 9.73a3 3 0 1 0 0 4.54l6.9 4.02a2.84 2.84 0 0 0-.08.7A3 3 0 1 0 18 16.08Z"/></svg>
+        <span>Xuất & chia sẻ</span>
+      </button>
+    </nav>
+
+    <!-- ===== TỔNG QUAN ===== -->
+    <section class="panel is-active" data-panel="overview">
+      <div class="stats-grid" aria-label="Tổng quan chuyến đi">
+        <article class="stat-card"><span>Tổng chi phí</span><strong id="statTotal">0 ₫</strong></article>
+        <article class="stat-card"><span>Số khoản chi</span><strong id="statExpenseCount">0</strong></article>
+        <article class="stat-card"><span>Thành viên</span><strong id="statMemberCount">0</strong></article>
+        <article class="stat-card stat-card--accent"><span>Giao dịch cần chuyển</span><strong id="statTransferCount">0</strong></article>
+      </div>
+
+      <section class="card settlement-card">
+        <div class="section-title"><h2>Công nợ cần thanh toán</h2><p>Nhấn “Đã trả” sau khi người gửi hoàn tất chuyển tiền.</p></div>
+        <div id="settlementList" class="settlement-list"></div>
+        <details class="payment-history">
+          <summary>Lịch sử đã thanh toán</summary>
+          <div id="paymentHistoryList" class="settlement-list"></div>
+        </details>
+      </section>
+
+      <section class="card">
+        <div class="section-title"><h2>Đối soát theo thành viên</h2><p>Ghi nhận thanh toán sẽ tự tính lại số còn nợ và số còn được nhận.</p></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Thành viên</th><th class="align-right">Phải chịu</th><th class="align-right">Đã ứng</th><th class="align-right">Đã chuyển</th><th class="align-right">Đã nhận</th><th class="align-right">Còn lại</th><th>Trạng thái</th></tr></thead>
+            <tbody id="summaryTableBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card tips">
+        <div class="section-title"><h2>Cách tính</h2></div>
+        <div class="tips__grid">
+          <p><strong>Đã trả</strong> — tiền người đó ứng cho nhóm.</p>
+          <p><strong>Phải chịu</strong> — phần người đó thực tế sử dụng.</p>
+          <p><strong>Số dư</strong> = Đã trả − Phải chịu.</p>
+        </div>
+      </section>
     </section>
 
-    <section class="stats-grid" aria-label="Tổng quan chuyến đi">
-      <article class="stat-card"><span>Tổng chi phí</span><strong id="statTotal">0 ₫</strong></article>
-      <article class="stat-card"><span>Số khoản chi</span><strong id="statExpenseCount">0</strong></article>
-      <article class="stat-card"><span>Thành viên</span><strong id="statMemberCount">0</strong></article>
-      <article class="stat-card"><span>Giao dịch cần chuyển</span><strong id="statTransferCount">0</strong></article>
-    </section>
+    <!-- ===== CHI PHÍ ===== -->
+    <section class="panel" data-panel="expenses">
+      <section class="card">
+        <div class="section-title"><h2 id="expenseFormTitle">Thêm khoản chi</h2><p>Chỉ cần 3 bước: nội dung, số tiền, ai tham gia.</p></div>
+        <form id="expenseForm">
+          <div class="form-grid form-grid--3">
+            <div class="field"><label for="expenseDescription">Nội dung <span>*</span></label><input id="expenseDescription" type="text" maxlength="120" placeholder="Ví dụ: Tiền phòng" /></div>
+            <div class="field"><label for="expenseAmount">Tổng tiền <span>*</span></label><div class="money-input"><input id="expenseAmount" type="text" inputmode="numeric" placeholder="0" autocomplete="off" /><span>₫</span></div></div>
+            <div class="field"><label for="expensePayer">Người trả <span>*</span></label><select id="expensePayer"></select></div>
+          </div>
 
-    <section class="layout">
-      <aside class="sidebar">
-        <section class="card">
-          <div class="section-title"><h2>Thành viên</h2><p>Mỗi chuyến đi có danh sách riêng. Email dùng để chia sẻ Sheet.</p></div>
-          <form id="memberForm" class="member-form">
-            <input id="memberName" type="text" maxlength="40" placeholder="Tên thành viên" autocomplete="off" />
-            <input id="memberEmail" type="email" maxlength="120" placeholder="Email Google (khuyến nghị)" autocomplete="off" />
-            <div class="member-form__actions">
-              <button id="btnCancelMemberEdit" class="btn btn--ghost hidden" type="button">Hủy sửa</button>
-              <button id="btnSaveMember" class="btn btn--primary" type="submit">Thêm thành viên</button>
-            </div>
-          </form>
-          <p id="memberError" class="field-error" aria-live="polite"></p><div id="memberList" class="member-list"></div>
-        </section>
+          <fieldset class="fieldset">
+            <legend>Người tham gia <span>*</span></legend>
+            <div class="fieldset__actions"><button id="btnSelectAll" type="button" class="link-button">Chọn tất cả</button><button id="btnClearParticipants" type="button" class="link-button">Bỏ chọn</button></div>
+            <div id="participantList" class="participant-grid"></div>
+          </fieldset>
 
-        <section class="card sheet-card">
-          <div class="section-title"><h2>Google Sheet của trip</h2><p>Luôn tạo được Sheet. Thành viên có email sẽ được cấp quyền tự động.</p></div>
-          <details class="setup-guide">
-            <summary>Hướng dẫn cấu hình từng bước</summary>
-            <ol>
-              <li><a href="https://script.google.com/home/projects/create" target="_blank" rel="noopener">Tạo dự án Apps Script mới</a>.</li>
-              <li><a href="Code.gs" download="TripSplit-Code.gs">Tải Code.gs</a>, mở file rồi dán toàn bộ vào trình soạn thảo Apps Script và bấm Lưu.</li>
-              <li>Vào <strong>Project Settings → Script Properties</strong>, thêm tên <code>TRIPSPLIT_SECRET</code> và dùng cùng mã bí mật bên dưới.</li>
-              <li>Chọn <strong>Deploy → New deployment → Web app</strong>; đặt <strong>Execute as: Me</strong> và <strong>Who has access: Anyone</strong>.</li>
-              <li>Cấp quyền, sao chép URL kết thúc bằng <code>/exec</code> rồi dán vào ô Web App URL.</li>
-            </ol>
-            <button id="btnGenerateSecret" class="link-button setup-guide__generate" type="button">Tạo mã bí mật an toàn</button>
-          </details>
-          <div class="field"><label for="appsScriptUrl">Google Apps Script Web App URL</label><input id="appsScriptUrl" type="url" placeholder="https://script.google.com/macros/s/.../exec" /></div>
-          <div class="field field--compact"><label for="appsScriptSecret">Mã bí mật</label><input id="appsScriptSecret" type="password" placeholder="Khớp Script Property TRIPSPLIT_SECRET" autocomplete="off" /></div>
-          <p class="helper-text">URL và mã bí mật chỉ lưu trên thiết bị này. Không gửi mã bí mật cho người khác.</p>
-          <button id="btnShareSheet" class="btn btn--sheet" type="button">Tạo / cập nhật & chia sẻ Sheet</button>
-          <button id="btnExportCsv" class="btn btn--ghost btn--full" type="button">Tải CSV của trip này</button>
-          <p id="sheetError" class="field-error" aria-live="polite"></p>
-        </section>
+          <fieldset class="fieldset">
+            <legend>Cách chia</legend>
+            <div class="split-mode"><label><input type="radio" name="splitMode" value="equal" checked /> Chia đều</label><label><input type="radio" name="splitMode" value="custom" /> Nhập riêng từng người</label></div>
+            <div id="equalSplitPreview" class="split-preview"></div>
+            <div id="customShares" class="custom-shares hidden"></div>
+          </fieldset>
 
-        <section class="card tips"><h2>Cách tính</h2><p><strong>Đã trả</strong>: tiền người đó ứng cho nhóm.</p><p><strong>Phải chịu</strong>: phần người đó thực tế sử dụng.</p><p><strong>Số dư</strong> = Đã trả − Phải chịu.</p></section>
-      </aside>
-
-      <div class="content">
-        <section class="card">
-          <div class="section-title"><h2 id="expenseFormTitle">Thêm khoản chi</h2><p>Chọn người trả, người sử dụng và cách chia.</p></div>
-          <form id="expenseForm">
-            <div class="form-grid form-grid--3">
-              <div class="field"><label for="expenseDescription">Nội dung <span>*</span></label><input id="expenseDescription" type="text" maxlength="120" placeholder="Ví dụ: Tiền phòng" /></div>
-              <div class="field"><label for="expenseAmount">Tổng tiền <span>*</span></label><div class="money-input"><input id="expenseAmount" type="text" inputmode="numeric" placeholder="0" autocomplete="off" /><span>₫</span></div></div>
-              <div class="field"><label for="expensePayer">Người trả <span>*</span></label><select id="expensePayer"></select></div>
-            </div>
+          <details class="more-fields">
+            <summary>Thêm chi tiết (ngày, nhóm, ghi chú)</summary>
             <div class="form-grid form-grid--3">
               <div class="field"><label for="expenseDate">Ngày chi</label><input id="expenseDate" type="date" /><small class="field-hint">Giờ được ghi tự động khi lưu.</small></div>
               <div class="field"><label for="expenseCategory">Nhóm chi phí</label><select id="expenseCategory"><option>Ăn uống</option><option>Di chuyển</option><option>Lưu trú</option><option>Vui chơi</option><option>Mua sắm</option><option>Khác</option></select></div>
               <div class="field"><label for="expenseNote">Ghi chú</label><input id="expenseNote" type="text" maxlength="150" placeholder="Không bắt buộc" /></div>
             </div>
-            <fieldset class="fieldset"><legend>Người tham gia <span>*</span></legend><div class="fieldset__actions"><button id="btnSelectAll" type="button" class="link-button">Chọn tất cả</button><button id="btnClearParticipants" type="button" class="link-button">Bỏ chọn</button></div><div id="participantList" class="participant-grid"></div></fieldset>
-            <fieldset class="fieldset"><legend>Cách chia</legend><div class="split-mode"><label><input type="radio" name="splitMode" value="equal" checked /> Chia đều</label><label><input type="radio" name="splitMode" value="custom" /> Nhập riêng từng người</label></div><div id="equalSplitPreview" class="split-preview"></div><div id="customShares" class="custom-shares hidden"></div></fieldset>
-            <p id="expenseError" class="form-error" aria-live="polite"></p><div class="form-actions"><button id="btnCancelEdit" type="button" class="btn btn--ghost hidden">Hủy sửa</button><button id="btnSaveExpense" type="submit" class="btn btn--primary">Lưu khoản chi</button></div>
-          </form>
-        </section>
+          </details>
 
-        <section class="card"><div class="section-title section-title--row"><div><h2>Danh sách chi phí</h2><p>Chỉ hiển thị dữ liệu của chuyến đi đang chọn.</p></div><input id="expenseSearch" class="search-input" type="search" placeholder="Tìm nội dung..." /></div><div class="table-wrap"><table><thead><tr><th>Nội dung</th><th>Ngày &amp; giờ</th><th>Người trả</th><th>Người tham gia</th><th class="align-right">Tổng tiền</th><th class="align-right">Tổng tiền/người</th><th></th></tr></thead><tbody id="expenseTableBody"></tbody></table></div><div id="expenseEmpty" class="empty-state hidden">Chưa có khoản chi nào.</div></section>
-        <section class="card"><div class="section-title"><h2>Đối soát theo thành viên</h2><p>Ghi nhận thanh toán sẽ tự tính lại số còn nợ và số còn được nhận.</p></div><div class="table-wrap"><table><thead><tr><th>Thành viên</th><th class="align-right">Phải chịu</th><th class="align-right">Đã ứng</th><th class="align-right">Đã chuyển</th><th class="align-right">Đã nhận</th><th class="align-right">Còn lại</th><th>Trạng thái</th></tr></thead><tbody id="summaryTableBody"></tbody></table></div></section>
-        <section class="card settlement-card"><div class="section-title"><h2>Công nợ cần thanh toán</h2><p>Nhấn “Đánh dấu đã trả” sau khi người gửi hoàn tất chuyển tiền.</p></div><div id="settlementList" class="settlement-list"></div><div class="payment-history"><div class="section-title"><h3>Lịch sử đã thanh toán</h3><p>Các giao dịch đã xác nhận được tô xanh và có thể hoàn tác.</p></div><div id="paymentHistoryList" class="settlement-list"></div></div></section>
-      </div>
+          <p id="expenseError" class="form-error" aria-live="polite"></p>
+          <div class="form-actions">
+            <button id="btnCancelEdit" type="button" class="btn btn--ghost hidden">Hủy sửa</button>
+            <button id="btnSaveExpense" type="submit" class="btn btn--primary">Lưu khoản chi</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="card">
+        <div class="section-title section-title--row"><div><h2>Danh sách chi phí</h2><p>Chỉ hiển thị dữ liệu của chuyến đi đang chọn.</p></div><input id="expenseSearch" class="search-input" type="search" placeholder="Tìm nội dung..." /></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Nội dung</th><th>Ngày &amp; giờ</th><th>Người trả</th><th>Người tham gia</th><th class="align-right">Tổng tiền</th><th class="align-right">Tiền/người</th><th></th></tr></thead>
+            <tbody id="expenseTableBody"></tbody>
+          </table>
+        </div>
+        <div id="expenseEmpty" class="empty-state hidden">Chưa có khoản chi nào.</div>
+      </section>
+    </section>
+
+    <!-- ===== THÀNH VIÊN ===== -->
+    <section class="panel" data-panel="members">
+      <section class="card">
+        <div class="section-title"><h2>Thành viên</h2><p>Mỗi chuyến đi có danh sách riêng. Email dùng để chia sẻ Google Sheet.</p></div>
+        <form id="memberForm" class="member-form">
+          <input id="memberName" type="text" maxlength="40" placeholder="Tên thành viên" autocomplete="off" />
+          <input id="memberEmail" type="email" maxlength="120" placeholder="Email Google (khuyến nghị)" autocomplete="off" />
+          <div class="member-form__actions">
+            <button id="btnCancelMemberEdit" class="btn btn--ghost hidden" type="button">Hủy sửa</button>
+            <button id="btnSaveMember" class="btn btn--primary" type="submit">Thêm thành viên</button>
+          </div>
+        </form>
+        <p id="memberError" class="field-error" aria-live="polite"></p>
+        <div id="memberList" class="member-list"></div>
+      </section>
+    </section>
+
+    <!-- ===== XUẤT & CHIA SẺ ===== -->
+    <section class="panel" data-panel="share">
+      <section class="card sheet-card">
+        <div class="section-title"><h2>Google Sheet của trip</h2><p>Luôn tạo được Sheet. Thành viên có email sẽ được cấp quyền tự động.</p></div>
+        <details class="setup-guide">
+          <summary>Hướng dẫn cấu hình từng bước</summary>
+          <ol>
+            <li><a href="https://script.google.com/home/projects/create" target="_blank" rel="noopener">Tạo dự án Apps Script mới</a>.</li>
+            <li><a href="Code.gs" download="TripSplit-Code.gs">Tải Code.gs</a>, mở file rồi dán toàn bộ vào trình soạn thảo Apps Script và bấm Lưu.</li>
+            <li>Vào <strong>Project Settings → Script Properties</strong>, thêm tên <code>TRIPSPLIT_SECRET</code> và dùng cùng mã bí mật bên dưới.</li>
+            <li>Chọn <strong>Deploy → New deployment → Web app</strong>; đặt <strong>Execute as: Me</strong> và <strong>Who has access: Anyone</strong>.</li>
+            <li>Cấp quyền, sao chép URL kết thúc bằng <code>/exec</code> rồi dán vào ô Web App URL.</li>
+          </ol>
+          <button id="btnGenerateSecret" class="link-button setup-guide__generate" type="button">Tạo mã bí mật an toàn</button>
+        </details>
+        <div class="field"><label for="appsScriptUrl">Google Apps Script Web App URL</label><input id="appsScriptUrl" type="url" placeholder="https://script.google.com/macros/s/.../exec" /></div>
+        <div class="field"><label for="appsScriptSecret">Mã bí mật</label><input id="appsScriptSecret" type="password" placeholder="Khớp Script Property TRIPSPLIT_SECRET" autocomplete="off" /></div>
+        <p class="helper-text">URL và mã bí mật chỉ lưu trên thiết bị này. Không gửi mã bí mật cho người khác.</p>
+        <button id="btnShareSheet" class="btn btn--sheet" type="button">Tạo / cập nhật & chia sẻ Sheet</button>
+        <p id="sheetError" class="field-error" aria-live="polite"></p>
+      </section>
+
+      <section class="card">
+        <div class="section-title"><h2>Sao lưu & xuất dữ liệu</h2><p>Dữ liệu được lưu trên thiết bị. Nên sao lưu định kỳ để tránh mất mát.</p></div>
+        <div class="export-grid">
+          <button id="btnExportCsv" class="btn btn--soft" type="button">📄 CSV của trip này</button>
+          <button id="btnExportJson" class="btn btn--soft" type="button">💾 Sao lưu JSON</button>
+          <label class="btn btn--soft file-button">📂 Khôi phục JSON<input id="fileImportJson" type="file" accept=".json,application/json" hidden /></label>
+        </div>
+      </section>
     </section>
   </main>
 
@@ -118,6 +224,33 @@
   </dialog>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="logic.js?v=9"></script><script src="app.js?v=9"></script>
+
+  <script>
+    (function () {
+      "use strict";
+      var tabs = Array.prototype.slice.call(document.querySelectorAll(".tab"));
+      var panels = Array.prototype.slice.call(document.querySelectorAll(".panel"));
+      function activate(name) {
+        tabs.forEach(function (tab) {
+          var on = tab.dataset.tab === name;
+          tab.classList.toggle("is-active", on);
+          tab.setAttribute("aria-selected", on ? "true" : "false");
+        });
+        panels.forEach(function (panel) {
+          panel.classList.toggle("is-active", panel.dataset.panel === name);
+        });
+        if (window.innerWidth <= 760) window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+      tabs.forEach(function (tab) {
+        tab.addEventListener("click", function () { activate(tab.dataset.tab); });
+      });
+      // Khi bấm sửa 1 khoản chi từ danh sách, chuyển sang tab Chi phí
+      document.addEventListener("click", function (event) {
+        if (event.target.closest("[data-edit-expense]")) activate("expenses");
+      });
+    })();
+  </script>
+  <script src="logic.js?v=11"></script>
+  <script src="app.js?v=11"></script>
 </body>
 </html>
