@@ -18,10 +18,40 @@ test("ships the professional TripSplit workspace and account controls", async ()
   assert.match(html, /data-tab="share"/);
   assert.match(html, /id="btnSignIn"/);
   assert.match(html, /id="btnSignOut"/);
+  assert.match(html, /id="shareMenu"/);
+  assert.match(html, /data-share-action="email"/);
+  assert.match(html, /data-share-action="facebook"/);
+  assert.match(html, /data-share-action="copy"/);
   assert.match(app, /fetch\("\/api\/me"/);
   assert.match(app, /fetch\("\/api\/account\/trips"/);
   assert.match(app, /loadSharedTripFromUrl/);
+  assert.match(app, /navigator\.share/);
+  assert.match(app, /Logic\.buildShareContent/);
+  assert.match(app, /event\.key === "Escape"/);
   assert.match(css, /\.account-box/);
+  assert.match(css, /\.share-menu/);
+});
+
+test("builds safe, deduplicated share targets", async () => {
+  await import(new URL("public/tripsplit/logic.js", root));
+  const Logic = globalThis.TravelExpenseLogic;
+  const content = Logic.buildShareContent(
+    "Đà Lạt cùng nhóm",
+    "https://example.com/?trip=abc-123",
+    [
+      { email: " An@Example.com " },
+      { email: "an@example.com" },
+      { email: "khong-hop-le" },
+      { email: "binh@example.com" },
+    ],
+  );
+
+  assert.deepEqual(content.emails, ["an@example.com", "binh@example.com"]);
+  assert.match(content.mailtoUrl, /^mailto:\?bcc=/);
+  assert.match(decodeURIComponent(content.mailtoUrl), /an@example\.com,binh@example\.com/);
+  assert.match(content.facebookUrl, /^https:\/\/www\.facebook\.com\/sharer\/sharer\.php\?u=/);
+  assert.match(decodeURIComponent(content.facebookUrl), /trip=abc-123/);
+  assert.throws(() => Logic.buildShareContent("Trip", "javascript:alert(1)", []), /không hợp lệ/);
 });
 
 test("persists owned trips and revision history in D1", async () => {

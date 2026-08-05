@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#ffffff" />
   <meta name="description" content="Quản lý và chia chi phí cho nhiều chuyến đi, xuất và chia sẻ Google Sheet." />
   <title>TripSplit — Chia chi phí nhóm</title>
-  <link rel="stylesheet" href="styles.css?v=11" />
+  <link rel="stylesheet" href="styles.css?v=12" />
 </head>
 <body>
   <header class="appbar">
@@ -44,7 +44,27 @@
       <div class="trip-bar__aside">
         <span class="save-status" id="saveStatus">Đã lưu trên thiết bị</span>
         <div class="trip-bar__actions">
-          <button id="btnShareTrip" class="btn btn--soft" type="button">🔗 Chia sẻ trip</button>
+          <div id="shareControl" class="share-control">
+            <button id="btnShareTrip" class="btn btn--soft" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="shareMenu">↗ Chia sẻ</button>
+            <div id="shareMenu" class="share-menu hidden" role="menu" aria-label="Chọn cách chia sẻ">
+              <div class="share-menu__header">
+                <strong>Chia sẻ chuyến đi</strong>
+                <span id="shareMenuHint">Đang chuẩn bị liên kết an toàn…</span>
+              </div>
+              <button id="shareNative" class="share-menu__item hidden" type="button" role="menuitem" data-share-action="native">
+                <span aria-hidden="true">↗</span><span><strong>Ứng dụng trên thiết bị</strong><small>Zalo, Messenger và ứng dụng được hỗ trợ</small></span>
+              </button>
+              <button id="shareEmail" class="share-menu__item" type="button" role="menuitem" data-share-action="email">
+                <span aria-hidden="true">✉</span><span><strong>Soạn email cho thành viên</strong><small id="shareEmailHint">Dùng email đã nhập trong trip</small></span>
+              </button>
+              <button class="share-menu__item" type="button" role="menuitem" data-share-action="facebook">
+                <span class="share-menu__facebook" aria-hidden="true">f</span><span><strong>Chia sẻ lên Facebook</strong><small>Mở cửa sổ Facebook Share</small></span>
+              </button>
+              <button class="share-menu__item" type="button" role="menuitem" data-share-action="copy">
+                <span aria-hidden="true">🔗</span><span><strong>Sao chép liên kết</strong><small>Dán vào bất kỳ ứng dụng trò chuyện nào</small></span>
+              </button>
+            </div>
+          </div>
           <button id="btnEditTrip" class="btn btn--soft" type="button">Sửa</button>
           <button id="btnDeleteTrip" class="btn btn--soft btn--danger" type="button">Xóa</button>
         </div>
@@ -250,7 +270,7 @@
       });
     })();
   </script>
-  <script src="logic.js?v=11"></script>
-  <script src="app.js?v=11"></script>
+  <script src="logic.js?v=12"></script>
+  <script src="app.js?v=12"></script>
 </body>
 </html>

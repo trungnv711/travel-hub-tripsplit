@@ -225,6 +225,33 @@
     return { valid: true, message: "" };
   }
 
+  function normalizeShareEmails(members, limit = 50) {
+    const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const safeLimit = Math.max(0, Math.min(50, toSafeInteger(limit)));
+    const emails = (Array.isArray(members) ? members : [])
+      .map((member) => String(member?.email || "").trim().toLowerCase())
+      .filter((email) => validEmail.test(email));
+    return [...new Set(emails)].slice(0, safeLimit);
+  }
+
+  function buildShareContent(tripName, shareUrl, members) {
+    const name = String(tripName || "Chuyến đi").trim() || "Chuyến đi";
+    const url = new URL(String(shareUrl || ""));
+    if (!/^https?:$/.test(url.protocol)) throw new Error("Liên kết chia sẻ không hợp lệ.");
+    const normalizedUrl = url.toString();
+    const title = `TripSplit · ${name}`;
+    const message = `Cùng theo dõi và đối soát chi phí chuyến đi “${name}” trên TripSplit.`;
+    const emails = normalizeShareEmails(members);
+    return {
+      title,
+      message,
+      url: normalizedUrl,
+      emails,
+      mailtoUrl: `mailto:?bcc=${encodeURIComponent(emails.join(","))}&subject=${encodeURIComponent(`[TripSplit] ${name}`)}&body=${encodeURIComponent(`${message}\n\n${normalizedUrl}`)}`,
+      facebookUrl: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(normalizedUrl)}`,
+    };
+  }
+
   const api = {
     toSafeInteger,
     splitEqual,
@@ -235,6 +262,8 @@
     validateState,
     validateTrip,
     validatePortfolio,
+    normalizeShareEmails,
+    buildShareContent,
   };
 
   global.TravelExpenseLogic = api;

@@ -20,7 +20,8 @@
     "btnClearParticipants", "tripDialog", "tripForm", "tripDialogTitle", "tripId", "tripName",
     "tripDestination", "tripStartDate", "tripEndDate", "tripStatusInput", "tripError",
     "btnCloseTripDialog", "btnCancelTrip", "accountBox", "accountName", "accountEmail",
-    "btnSignIn", "btnSignOut"
+    "btnSignIn", "btnSignOut", "shareControl", "shareMenu", "shareMenuHint", "shareNative",
+    "shareEmail", "shareEmailHint"
   ].map((id) => [id, document.getElementById(id)]));
 
   let portfolio = loadPortfolio();
@@ -31,6 +32,8 @@
   const shareCreationPromises = new Map();
   let isApplyingSharedTrip = false;
   let account = null;
+  let preparedShareUrl = "";
+  let sharePreparationToken = 0;
   const SHARE_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
   function uid(prefix) {
@@ -238,7 +241,7 @@
       localStorage.setItem(STORAGE_KEY, JSON.stringify(portfolio));
       if (activeTrip().id === trip.id) {
         setSharedUrl(trip.shareId);
-        dom.btnShareTrip.textContent = "🔗 Sao chép link trip";
+        dom.btnShareTrip.textContent = "↗ Chia sẻ";
         dom.saveStatus.textContent = "Đã tạo link · đang đồng bộ…";
       }
       await syncSharedTrip(trip);
@@ -254,20 +257,85 @@
     shareCreationPromises.set(trip.id, creation);
     return creation;
   }
-  async function shareCurrentTrip() {
+  function memberEmails(trip = activeTrip()) {
+    return Logic.normalizeShareEmails(trip.members);
+  }
+  function closeShareMenu(restoreFocus = false) {
+    sharePreparationToken += 1;
+    dom.shareMenu.classList.add("hidden");
+    dom.btnShareTrip.setAttribute("aria-expanded", "false");
+    preparedShareUrl = "";
+    if (restoreFocus) dom.btnShareTrip.focus();
+  }
+  function setShareMenuState(state, message) {
+    const emails = memberEmails();
+    const unavailable = state !== "ready";
+    dom.shareMenuHint.textContent = message;
+    dom.shareMenuHint.dataset.state = state;
+    dom.shareEmailHint.textContent = emails.length ? `${emails.length} thành viên có email` : "Chưa có email thành viên";
+    dom.shareNative.classList.toggle("hidden", typeof navigator.share !== "function");
+    dom.shareMenu.querySelectorAll("[data-share-action]").forEach((button) => { button.disabled = unavailable; });
+    dom.shareEmail.disabled = unavailable || !emails.length;
+  }
+  async function openShareMenu() {
+    if (!dom.shareMenu.classList.contains("hidden")) { closeShareMenu(true); return; }
     if (location.protocol === "file:") { showToast("Chức năng chia sẻ chỉ có trên bản online."); return; }
+
     const trip = activeTrip();
-    dom.btnShareTrip.disabled = true;
+    const token = ++sharePreparationToken;
+    preparedShareUrl = "";
+    dom.shareMenu.classList.remove("hidden");
+    dom.btnShareTrip.setAttribute("aria-expanded", "true");
+    setShareMenuState("loading", "Đang lưu dữ liệu mới nhất và chuẩn bị liên kết…");
     try {
       if (!trip.shareId) await ensureTripShared(trip); else await syncSharedTrip(trip);
-      const url = setSharedUrl(trip.shareId);
-      const copied = await copyText(url);
-      render();
-      showToast(copied ? "Đã sao chép link trip. Gửi link này cho cả nhóm." : `Link trip: ${url}`);
+      if (token !== sharePreparationToken || activeTrip().id !== trip.id) return;
+      preparedShareUrl = setSharedUrl(trip.shareId);
+      setShareMenuState("ready", "Liên kết đã sẵn sàng để gửi cho cả nhóm.");
     } catch (error) {
+      if (token !== sharePreparationToken) return;
       dom.saveStatus.textContent = "Đã lưu trên thiết bị";
-      showToast(error instanceof Error ? error.message : "Không thể chia sẻ chuyến đi.");
-    } finally { dom.btnShareTrip.disabled = false; }
+      setShareMenuState("error", error instanceof Error ? error.message : "Không thể chuẩn bị liên kết.");
+      showToast(error instanceof Error ? error.message : "Không thể chuẩn bị liên kết chia sẻ.");
+    }
+  }
+  async function runShareAction(action) {
+    if (!preparedShareUrl) { showToast("Liên kết chưa sẵn sàng. Vui lòng thử lại."); return; }
+    const trip = activeTrip();
+    const content = Logic.buildShareContent(trip.name, preparedShareUrl, trip.members);
+
+    if (action === "native") {
+      try {
+        await navigator.share({ title: content.title, text: content.message, url: content.url });
+        closeShareMenu();
+      } catch (error) {
+        if (error?.name !== "AbortError") showToast("Thiết bị không thể mở bảng chia sẻ. Hãy dùng Sao chép liên kết.");
+      }
+      return;
+    }
+    if (action === "email") {
+      const emails = content.emails;
+      if (!emails.length) { showToast("Hãy bổ sung email thành viên trước khi gửi."); return; }
+      const link = document.createElement("a");
+      link.href = content.mailtoUrl;
+      link.target = "_top";
+      document.body.appendChild(link); link.click(); link.remove();
+      closeShareMenu();
+      showToast("Đã mở ứng dụng email. Hãy kiểm tra rồi bấm Gửi.");
+      return;
+    }
+    if (action === "facebook") {
+      const popup = window.open(content.facebookUrl, "tripsplit-facebook-share", "popup,width=720,height=720");
+      if (!popup) { showToast("Trình duyệt đang chặn cửa sổ Facebook. Hãy cho phép popup rồi thử lại."); return; }
+      try { popup.opener = null; } catch { /* Browser controls opener policy. */ }
+      closeShareMenu();
+      return;
+    }
+    if (action === "copy") {
+      const copied = await copyText(preparedShareUrl);
+      if (copied) closeShareMenu();
+      showToast(copied ? "Đã sao chép liên kết chuyến đi." : `Không thể tự sao chép. Link: ${preparedShareUrl}`);
+    }
   }
   async function loadSharedTripFromUrl() {
     const shareId = shareIdFromUrl();
@@ -301,7 +369,7 @@
     dom.tripStatus.dataset.status = trip.status;
     dom.tripTitle.textContent = trip.name;
     dom.tripMeta.textContent = [trip.destination || "Chưa có điểm đến", formatDateRange(trip), `${trip.members.length} thành viên`].join(" · ");
-    dom.btnShareTrip.textContent = trip.shareId ? "🔗 Sao chép link trip" : "🔗 Chia sẻ trip";
+    dom.btnShareTrip.textContent = "↗ Chia sẻ";
     renderMembers(); renderPayerOptions(); renderParticipants(); renderExpenses(); renderSummary(); renderStats(); updateSplitEditor(); renderAccount();
   }
 
@@ -548,9 +616,19 @@
     const reader = new FileReader(); reader.onload = () => { try { const candidate = JSON.parse(String(reader.result)); let next; if (Logic.validatePortfolio(candidate).valid) next = normalizePortfolio(candidate); else if (Logic.validateState(candidate).valid) next = migrateLegacy(candidate); else throw new Error("Cấu trúc dữ liệu không hợp lệ."); portfolio = next; savePortfolio("Đã khôi phục dữ liệu"); editingExpenseId = null; resetExpenseForm(); render(); showToast("Khôi phục dữ liệu thành công."); } catch (error) { showToast(`Không thể nhập file: ${error.message}`); } finally { dom.fileImportJson.value = ""; } }; reader.readAsText(file);
   }
 
-  dom.tripSelect.addEventListener("change", () => { portfolio.activeTripId = dom.tripSelect.value; editingExpenseId = null; resetMemberForm(); localStorage.setItem(STORAGE_KEY, JSON.stringify(portfolio)); resetExpenseForm(); render(); setSharedUrl(activeTrip().shareId || ""); });
+  dom.tripSelect.addEventListener("change", () => { closeShareMenu(); portfolio.activeTripId = dom.tripSelect.value; editingExpenseId = null; resetMemberForm(); localStorage.setItem(STORAGE_KEY, JSON.stringify(portfolio)); resetExpenseForm(); render(); setSharedUrl(activeTrip().shareId || ""); });
   dom.btnNewTrip.addEventListener("click", () => openTripDialog()); dom.btnEditTrip.addEventListener("click", () => openTripDialog(activeTrip()));
-  dom.btnShareTrip.addEventListener("click", shareCurrentTrip);
+  dom.btnShareTrip.addEventListener("click", openShareMenu);
+  dom.shareMenu.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-share-action]");
+    if (button && !button.disabled) runShareAction(button.dataset.shareAction);
+  });
+  document.addEventListener("click", (event) => {
+    if (!dom.shareMenu.classList.contains("hidden") && !dom.shareControl.contains(event.target)) closeShareMenu();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !dom.shareMenu.classList.contains("hidden")) closeShareMenu(true);
+  });
   dom.btnDeleteTrip.addEventListener("click", () => { if (portfolio.trips.length === 1) { showToast("Cần giữ lại ít nhất một chuyến đi."); return; } const trip = activeTrip(); if (!confirm(`Xóa toàn bộ dữ liệu của “${trip.name}” khỏi thiết bị này?`)) return; portfolio.trips = portfolio.trips.filter((t) => t.id !== trip.id); portfolio.activeTripId = portfolio.trips[0].id; resetMemberForm(); localStorage.setItem(STORAGE_KEY, JSON.stringify(portfolio)); resetExpenseForm(); render(); setSharedUrl(activeTrip().shareId || ""); showToast("Đã xóa chuyến đi khỏi thiết bị này."); });
   dom.tripForm.addEventListener("submit", (event) => { event.preventDefault(); saveTripFromDialog(); }); [dom.btnCloseTripDialog, dom.btnCancelTrip].forEach((button) => button.addEventListener("click", () => dom.tripDialog.close()));
   dom.memberForm.addEventListener("submit", (event) => { event.preventDefault(); saveMember(); }); dom.btnCancelMemberEdit.addEventListener("click", () => { resetMemberForm(); renderMembers(); }); dom.memberList.addEventListener("click", (event) => { const editButton = event.target.closest("[data-edit-member]"), removeButton = event.target.closest("[data-remove-member]"); if (editButton) beginEditMember(editButton.dataset.editMember); if (removeButton) removeMember(removeButton.dataset.removeMember); });
