@@ -368,6 +368,11 @@ input::placeholder { color: #aba8a3; }
 
 /* ===================== Members ===================== */
 .member-form { display: grid; gap: 10px; }
+.member-advance-field { padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); }
+.member-advance-field label { margin-bottom: 7px; }
+.member-prepaid { color: var(--text) !important; white-space: normal !important; }
+.member-prepaid strong { display: inline; color: var(--primary-strong); }
+.prepaid-amount { color: var(--primary-strong); font-weight: 700; }
 .member-form__actions { display: flex; gap: 10px; }
 .member-form__actions .btn { flex: 1; }
 .member-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }

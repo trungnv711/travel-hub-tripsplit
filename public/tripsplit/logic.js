@@ -46,6 +46,7 @@
           name: member.name,
           owed: 0,
           paid: 0,
+          prepaid: toSafeInteger(member.prepaidAmount),
           balance: 0,
         },
       ])
@@ -153,6 +154,9 @@
       }
       if (memberIds.has(member.id)) {
         return { valid: false, message: "Mã thành viên bị trùng." };
+      }
+      if (member.prepaidAmount !== undefined && (!Number.isSafeInteger(member.prepaidAmount) || member.prepaidAmount < 0)) {
+        return { valid: false, message: `Tiền tạm ứng của "${member.name}" không hợp lệ.` };
       }
       memberIds.add(member.id);
     }

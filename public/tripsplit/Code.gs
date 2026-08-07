@@ -20,6 +20,7 @@ function doPost(e) {
     if (!locked) throw new Error('Một yêu cầu khác đang cập nhật Sheet. Vui lòng thử lại sau ít phút.');
     var spreadsheet = getOrCreateSpreadsheet_(data.trip);
     writeOverview_(spreadsheet, data);
+    writeAdvances_(spreadsheet, data);
     writeExpenses_(spreadsheet, data);
     writeSettlements_(spreadsheet, data);
     var shareResult = shareWithMembers_(spreadsheet, data.trip.members);
@@ -80,36 +81,59 @@ function writeOverview_(spreadsheet, data) {
   var trip = data.trip;
   var sheet = getSheet_(spreadsheet, 'Tổng quan');
   var totalExpense = trip.expenses.reduce(function(sum, item) { return sum + Number(item.amount || 0); }, 0);
+  var totalPrepaid = data.summary.reduce(function(sum, item) { return sum + Number(item.prepaid || 0); }, 0);
   var rows = [
-    ['TRIPSPLIT — BÁO CÁO QUYẾT TOÁN CHUYẾN ĐI', '', '', '', '', '', '', '', ''],
-    ['Cập nhật lúc', new Date(data.generatedAt), '', '', '', '', '', '', ''],
-    ['CHUYẾN ĐI', trip.name, 'ĐIỂM ĐẾN', trip.destination || 'Chưa cập nhật', 'THỜI GIAN', [trip.startDate || '?', trip.endDate || '?'].join(' – '), 'TRẠNG THÁI', trip.status || '', ''],
-    ['', '', '', '', '', '', '', '', ''],
-    ['TỔNG CHI PHÍ', totalExpense, 'THÀNH VIÊN', trip.members.length, 'CÒN GIAO DỊCH', data.settlements.length, 'ĐÃ THANH TOÁN', data.payments.length, ''],
-    ['', '', '', '', '', '', '', '', ''],
-    ['Thành viên', 'Email', 'Phải chịu', 'Đã ứng', 'Đã chuyển', 'Đã nhận', 'Còn phải trả', 'Còn được nhận', 'Trạng thái']
+    ['TRIPSPLIT — BÁO CÁO QUYẾT TOÁN CHUYẾN ĐI', '', '', '', '', '', '', '', '', ''],
+    ['Cập nhật lúc', new Date(data.generatedAt), '', '', '', '', '', '', '', ''],
+    ['CHUYẾN ĐI', trip.name, 'ĐIỂM ĐẾN', trip.destination || 'Chưa cập nhật', 'THỜI GIAN', [trip.startDate || '?', trip.endDate || '?'].join(' – '), 'TRẠNG THÁI', trip.status || '', '', ''],
+    ['', '', '', '', '', '', '', '', '', ''],
+    ['TỔNG CHI PHÍ', totalExpense, 'TẠM ỨNG ĐÃ THU', totalPrepaid, 'THÀNH VIÊN', trip.members.length, 'CÒN GIAO DỊCH', data.settlements.length, 'ĐÃ THANH TOÁN', data.payments.length],
+    ['', '', '', '', '', '', '', '', '', ''],
+    ['Thành viên', 'Email', 'Phải chịu', 'Tạm ứng đã thu', 'Đã ứng chi phí', 'Đã chuyển', 'Đã nhận', 'Còn phải trả', 'Còn được nhận', 'Trạng thái']
   ];
   data.summary.forEach(function(row) {
     var status = row.balance < 0 ? 'CÒN PHẢI TRẢ' : row.balance > 0 ? 'CÒN ĐƯỢC NHẬN' : (row.transferred || row.received) ? 'ĐÃ THANH TOÁN' : 'ĐÃ CÂN BẰNG';
-    rows.push([row.name, row.email || '', row.owed, row.paid, row.transferred || 0, row.received || 0, row.balance < 0 ? Math.abs(row.balance) : 0, row.balance > 0 ? row.balance : 0, status]);
+    rows.push([row.name, row.email || '', row.owed, row.prepaid || 0, row.paid, row.transferred || 0, row.received || 0, row.balance < 0 ? Math.abs(row.balance) : 0, row.balance > 0 ? row.balance : 0, status]);
   });
-  sheet.getRange(1, 1, rows.length, 9).setValues(rows);
-  sheet.getRange('A1:I1').merge().setFontSize(18).setFontWeight('bold').setBackground('#1d4ed8').setFontColor('#ffffff').setHorizontalAlignment('center');
-  sheet.getRange('A2:I2').setFontColor('#64748b').setFontStyle('italic');
-  sheet.getRange('A3:I3').setBackground('#eff6ff').setFontWeight('bold');
-  sheet.getRange('A5:H5').setBackground('#0f172a').setFontColor('#ffffff').setFontWeight('bold');
+  sheet.getRange(1, 1, rows.length, 10).setValues(rows);
+  sheet.getRange('A1:J1').merge().setFontSize(18).setFontWeight('bold').setBackground('#1d4ed8').setFontColor('#ffffff').setHorizontalAlignment('center');
+  sheet.getRange('A2:J2').setFontColor('#64748b').setFontStyle('italic');
+  sheet.getRange('A3:J3').setBackground('#eff6ff').setFontWeight('bold');
+  sheet.getRange('A5:J5').setBackground('#0f172a').setFontColor('#ffffff').setFontWeight('bold');
   sheet.getRange('B5').setNumberFormat('#,##0 [$₫-vi-VN]');
-  styleSheet_(sheet, 7, 9);
+  sheet.getRange('D5').setNumberFormat('#,##0 [$₫-vi-VN]');
+  styleSheet_(sheet, 7, 10);
   if (data.summary.length) {
-    sheet.getRange(8, 3, data.summary.length, 6).setNumberFormat('#,##0 [$₫-vi-VN]');
+    sheet.getRange(8, 3, data.summary.length, 7).setNumberFormat('#,##0 [$₫-vi-VN]');
     data.summary.forEach(function(row, index) {
-      var target = sheet.getRange(8 + index, 1, 1, 9);
+      var target = sheet.getRange(8 + index, 1, 1, 10);
       if (row.balance < 0) target.setBackground('#fff1f2');
       else if (row.balance > 0) target.setBackground('#eff6ff');
       else if (row.transferred || row.received) target.setBackground('#f0fdf4');
     });
   }
   sheet.setTabColor('#2563eb');
+}
+
+function writeAdvances_(spreadsheet, data) {
+  var sheet = getSheet_(spreadsheet, 'Tạm ứng');
+  var rows = [['STT', 'Thành viên', 'Email', 'Tạm ứng đã thu', 'Ghi chú']];
+  data.trip.members.forEach(function(member, index) {
+    rows.push([index + 1, member.name, member.email || '', Number(member.prepaidAmount || 0), 'Khoản cố định — chỉ thay đổi khi sửa thành viên trên TripSplit']);
+  });
+  rows.push(['', 'TỔNG TẠM ỨNG ĐÃ THU', '', data.summary.reduce(function(sum, item) { return sum + Number(item.prepaid || 0); }, 0), '']);
+  sheet.getRange(1, 1, rows.length, 5).setValues(rows);
+  styleSheet_(sheet, 1, 5);
+  sheet.getRange(1, 1, 1, 5).setBackground('#7c3aed').setFontColor('#ffffff').setFontWeight('bold');
+  sheet.getRange(2, 4, Math.max(1, rows.length - 1), 1).setNumberFormat('#,##0 [$₫-vi-VN]');
+  sheet.getRange(rows.length, 1, 1, 5).setBackground('#f3e8ff').setFontWeight('bold');
+  sheet.getRange(1, 1, rows.length, 5).applyRowBanding(SpreadsheetApp.BandingTheme.LIGHT_GREY, true, false);
+  sheet.getRange(1, 1, rows.length, 5).createFilter();
+  sheet.setColumnWidth(2, 180);
+  sheet.setColumnWidth(3, 240);
+  sheet.setColumnWidth(5, 360);
+  sheet.setFrozenRows(1);
+  sheet.setTabColor('#7c3aed');
 }
 
 function writeExpenses_(spreadsheet, data) {

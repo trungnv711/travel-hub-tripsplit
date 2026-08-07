@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#ffffff" />
   <meta name="description" content="Quản lý và chia chi phí cho nhiều chuyến đi, xuất và chia sẻ Google Sheet." />
   <title>TripSplit — Chia chi phí nhóm</title>
-  <link rel="stylesheet" href="styles.css?v=13" />
+  <link rel="stylesheet" href="styles.css?v=14" />
 </head>
 <body>
   <header class="appbar">
@@ -112,7 +112,7 @@
         <div class="section-title"><h2>Đối soát theo thành viên</h2><p>Ghi nhận thanh toán sẽ tự tính lại số còn nợ và số còn được nhận.</p></div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Thành viên</th><th class="align-right">Phải chịu</th><th class="align-right">Đã ứng</th><th class="align-right">Đã chuyển</th><th class="align-right">Đã nhận</th><th class="align-right">Còn lại</th><th>Trạng thái</th></tr></thead>
+            <thead><tr><th>Thành viên</th><th class="align-right">Phải chịu</th><th class="align-right">Tạm ứng đã thu</th><th class="align-right">Đã ứng chi phí</th><th class="align-right">Đã chuyển</th><th class="align-right">Đã nhận</th><th class="align-right">Còn lại</th><th>Trạng thái</th></tr></thead>
             <tbody id="summaryTableBody"></tbody>
           </table>
         </div>
@@ -121,9 +121,10 @@
       <section class="card tips">
         <div class="section-title"><h2>Cách tính</h2></div>
         <div class="tips__grid">
-          <p><strong>Đã trả</strong> — tiền người đó ứng cho nhóm.</p>
+          <p><strong>Tạm ứng đã thu</strong> — khoản thu trước cố định của từng thành viên, chỉ đổi khi sửa thành viên.</p>
+          <p><strong>Đã ứng chi phí</strong> — tiền người đó trực tiếp trả cho các khoản chi.</p>
           <p><strong>Phải chịu</strong> — phần người đó thực tế sử dụng.</p>
-          <p><strong>Số dư</strong> = Đã trả − Phải chịu.</p>
+          <p><strong>Số dư chi phí</strong> = Đã ứng chi phí − Phải chịu, sau đó điều chỉnh theo các giao dịch đã thanh toán.</p>
         </div>
       </section>
     </section>
@@ -188,6 +189,11 @@
         <form id="memberForm" class="member-form">
           <input id="memberName" type="text" maxlength="40" placeholder="Tên thành viên" autocomplete="off" />
           <input id="memberEmail" type="email" maxlength="120" placeholder="Email Google (khuyến nghị)" autocomplete="off" />
+          <div class="field member-advance-field">
+            <label for="memberPrepaidAmount">Tạm ứng đã thu <span>(cố định)</span></label>
+            <div class="money-input"><input id="memberPrepaidAmount" type="text" inputmode="numeric" placeholder="0" autocomplete="off" /><span>₫</span></div>
+            <small class="field-hint">Không tự thay đổi khi thêm chi phí hoặc ghi nhận thanh toán.</small>
+          </div>
           <div class="member-form__actions">
             <button id="btnCancelMemberEdit" class="btn btn--ghost hidden" type="button">Hủy sửa</button>
             <button id="btnSaveMember" class="btn btn--primary" type="submit">Thêm thành viên</button>
@@ -280,7 +286,7 @@
       });
     })();
   </script>
-  <script src="logic.js?v=13"></script>
-  <script src="app.js?v=13"></script>
+  <script src="logic.js?v=14"></script>
+  <script src="app.js?v=14"></script>
 </body>
 </html>

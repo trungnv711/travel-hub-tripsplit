@@ -25,6 +25,8 @@ test("ships the professional TripSplit workspace and account controls", async ()
   assert.match(html, /id="btnCheckAppsScript"/);
   assert.match(html, /id="sheetStatus"/);
   assert.match(html, /id="btnOpenSheet"/);
+  assert.match(html, /id="memberPrepaidAmount"/);
+  assert.match(html, /Tạm ứng đã thu/);
   assert.match(app, /fetch\("\/api\/me"/);
   assert.match(app, /fetch\("\/api\/account\/trips"/);
   assert.match(app, /loadSharedTripFromUrl/);
@@ -33,6 +35,31 @@ test("ships the professional TripSplit workspace and account controls", async ()
   assert.match(app, /event\.key === "Escape"/);
   assert.match(css, /\.account-box/);
   assert.match(css, /\.share-menu/);
+  assert.match(css, /\.member-advance-field/);
+});
+
+test("keeps member advances fixed and separate from expense settlement", async () => {
+  await import(new URL("public/tripsplit/logic.js", root));
+  const Logic = globalThis.TravelExpenseLogic;
+  const members = [
+    { id: "an", name: "An", prepaidAmount: 800_000 },
+    { id: "binh", name: "Bình", prepaidAmount: 200_000 },
+  ];
+  const expenses = [{
+    id: "expense-1",
+    description: "Tiền phòng",
+    amount: 1_000_000,
+    payerId: "an",
+    participantIds: ["an", "binh"],
+    splitMode: "equal",
+  }];
+
+  const summary = Logic.calculateOutstandingSummary(members, expenses, []);
+  assert.equal(summary.an.prepaid, 800_000);
+  assert.equal(summary.binh.prepaid, 200_000);
+  assert.equal(summary.an.balance, 500_000);
+  assert.equal(summary.binh.balance, -500_000);
+  assert.equal(Logic.validateState({ members, expenses }).valid, true);
 });
 
 test("checks and synchronizes Google Sheet through the protected bridge", async () => {
@@ -52,6 +79,8 @@ test("checks and synchronizes Google Sheet through the protected bridge", async 
   assert.match(script, /LockService\.getScriptLock/);
   assert.match(script, /responseMode === 'json'/);
   assert.match(script, /failedEmails/);
+  assert.match(script, /writeAdvances_/);
+  assert.match(script, /Tạm ứng đã thu/);
 });
 
 test("builds safe, deduplicated share targets", async () => {
