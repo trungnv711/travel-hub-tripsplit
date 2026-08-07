@@ -515,12 +515,16 @@ dialog::backdrop { background: rgba(20, 20, 19, .5); backdrop-filter: blur(3px);
 }
 
 @media (max-width: 760px) {
-  .appbar { top: 0; padding: 10px 16px; }
-  .appbar__trip { flex: 1 1 100%; }
-  .account-box { flex: 1 1 100%; padding: 10px 0 0; border-left: 0; border-top: 1px solid var(--line); }
+  .appbar { top: 0; padding: 10px 16px; gap: 10px; }
+  .brand { width: 100%; }
+  .appbar__trip { flex: 1 1 100%; width: 100%; min-width: 0; flex-wrap: wrap; align-items: end; }
+  .account-box { flex: 1 0 100%; width: 100%; padding: 10px 0 0; border-left: 0; border-top: 1px solid var(--line); }
   .account-box__copy { flex: 1; }
-  .trip-select { flex: 1; }
+  .account-box__copy strong, .account-box__copy span { max-width: none; }
+  .trip-select { flex: 1 1 180px; min-width: 0; }
+  .trip-select label { white-space: nowrap; }
   .trip-select select { min-width: 0; width: 100%; }
+  #btnNewTrip { flex: 0 0 auto; }
   .brand__text p { display: none; }
 
   .app { padding: 16px 16px 92px; gap: 14px; }
@@ -531,6 +535,7 @@ dialog::backdrop { background: rgba(20, 20, 19, .5); backdrop-filter: blur(3px);
   .trip-bar__actions .btn { flex: 1; }
   .share-control { flex: 1; }
   .share-control > .btn { width: 100%; }
+  .share-menu { position: fixed; left: 16px; right: 16px; top: auto; bottom: calc(72px + env(safe-area-inset-bottom)); width: auto; max-height: calc(100dvh - 110px); overflow-y: auto; }
   .sheet-actions { grid-template-columns: 1fr; }
 
   /* Tabs become a bottom navigation bar */
@@ -571,13 +576,21 @@ dialog::backdrop { background: rgba(20, 20, 19, .5); backdrop-filter: blur(3px);
 }
 
 @media (max-width: 620px) {
-  .account-box__copy span { max-width: 160px; }
   .account-box .btn { padding-inline: 12px; }
 }
 
 @media (max-width: 420px) {
+  .appbar { padding-inline: 12px; }
+  .app { padding-inline: 12px; }
+  .card { padding: 16px; }
+  #btnNewTrip { padding-inline: 13px; }
   .form-grid--3 { grid-template-columns: 1fr; }
   .participant-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 360px) {
+  .trip-select { flex-basis: 100%; }
+  #btnNewTrip { width: 100%; }
 }
 
 /* ===================== Dark mode ===================== */
