@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#ffffff" />
   <meta name="description" content="Quản lý và chia chi phí cho nhiều chuyến đi, xuất và chia sẻ Google Sheet." />
   <title>TripSplit — Chia chi phí nhóm</title>
-  <link rel="stylesheet" href="styles.css?v=14" />
+  <link rel="stylesheet" href="styles.css?v=15" />
 </head>
 <body>
   <header class="appbar">
@@ -239,6 +239,7 @@
       <section class="card">
         <div class="section-title"><h2>Sao lưu & xuất dữ liệu</h2><p>Dữ liệu được lưu trên thiết bị. Nên sao lưu định kỳ để tránh mất mát.</p></div>
         <div class="export-grid">
+          <button id="btnPreviewPdf" class="btn btn--primary" type="button">📕 Xem trước báo cáo PDF</button>
           <button id="btnExportCsv" class="btn btn--soft" type="button">📄 CSV của trip này</button>
           <button id="btnExportJson" class="btn btn--soft" type="button">💾 Sao lưu JSON</button>
           <label class="btn btn--soft file-button">📂 Khôi phục JSON<input id="fileImportJson" type="file" accept=".json,application/json" hidden /></label>
@@ -257,6 +258,21 @@
       <div class="field"><label for="tripStatusInput">Trạng thái</label><select id="tripStatusInput"><option value="planning">Đang chuẩn bị</option><option value="active">Đang diễn ra</option><option value="settling">Đang quyết toán</option><option value="closed">Đã kết thúc</option></select></div>
       <p id="tripError" class="form-error" aria-live="polite"></p><div class="form-actions"><button id="btnCancelTrip" class="btn btn--ghost" type="button">Hủy</button><button class="btn btn--primary" type="submit">Lưu chuyến đi</button></div>
     </form>
+  </dialog>
+
+  <dialog id="pdfPreviewDialog" class="pdf-dialog" aria-labelledby="pdfPreviewTitle">
+    <div class="pdf-dialog__shell">
+      <div class="pdf-dialog__header">
+        <div><h2 id="pdfPreviewTitle">Xem trước báo cáo thu chi</h2><p>Kiểm tra nội dung trước khi lưu thành PDF.</p></div>
+        <button id="btnClosePdfPreview" class="icon-button" type="button" aria-label="Đóng xem trước">✕</button>
+      </div>
+      <div class="pdf-dialog__notice">Báo cáo dùng khổ A4. Sau khi bấm “Lưu PDF”, chọn <strong>Save as PDF / Lưu dưới dạng PDF</strong> trong hộp thoại in.</div>
+      <div class="pdf-preview-scroll"><article id="pdfReport" class="pdf-report"></article></div>
+      <div class="pdf-dialog__actions">
+        <button id="btnCancelPdfPreview" class="btn btn--ghost" type="button">Quay lại chỉnh sửa</button>
+        <button id="btnPrintPdf" class="btn btn--primary" type="button">📕 Lưu PDF</button>
+      </div>
+    </div>
   </dialog>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -286,7 +302,7 @@
       });
     })();
   </script>
-  <script src="logic.js?v=14"></script>
-  <script src="app.js?v=14"></script>
+  <script src="logic.js?v=15"></script>
+  <script src="app.js?v=15"></script>
 </body>
 </html>

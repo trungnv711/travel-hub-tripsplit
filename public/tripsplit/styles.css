@@ -425,7 +425,7 @@ input::placeholder { color: #aba8a3; }
 .sheet-actions .btn { width: 100%; margin-top: 0; }
 @keyframes sheet-pulse { 50% { opacity: .35; transform: scale(.8); } }
 
-.export-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.export-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
 .export-grid .btn { width: 100%; }
 .file-button { display: inline-flex; align-items: center; }
 
@@ -511,6 +511,53 @@ dialog::backdrop { background: rgba(20, 20, 19, .5); backdrop-filter: blur(3px);
 .dialog-title h2 { font-size: 18px; font-weight: 700; }
 .dialog-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
+/* ===================== PDF report preview ===================== */
+.pdf-dialog {
+  width: min(1120px, calc(100% - 24px));
+  max-width: none;
+  height: min(94dvh, 920px);
+  max-height: 94dvh;
+  overflow: hidden;
+}
+.pdf-dialog__shell { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; height: 100%; }
+.pdf-dialog__header,
+.pdf-dialog__actions { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 16px 20px; background: var(--surface); }
+.pdf-dialog__header { border-bottom: 1px solid var(--line); }
+.pdf-dialog__header h2 { font-size: 19px; }
+.pdf-dialog__header p { margin-top: 3px; color: var(--muted); font-size: 13px; }
+.pdf-dialog__actions { justify-content: flex-end; border-top: 1px solid var(--line); }
+.pdf-dialog__notice { padding: 10px 20px; border-bottom: 1px solid var(--line); color: var(--text); background: var(--primary-soft); font-size: 13px; }
+.pdf-preview-scroll { min-height: 0; overflow: auto; padding: 24px; background: #d8dde6; }
+.pdf-report { width: min(794px, 100%); min-height: 1123px; margin: 0 auto; padding: 44px; color: #172033; background: #fff; box-shadow: 0 12px 36px rgba(15, 23, 42, .2); font-family: Arial, "Segoe UI", sans-serif; }
+.pdf-report__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding-bottom: 22px; border-bottom: 3px solid #2563eb; }
+.pdf-report__brand { color: #2563eb; font-size: 14px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.pdf-report h1 { margin-top: 7px; color: #0f172a; font-size: 27px; line-height: 1.2; }
+.pdf-report__meta { margin-top: 7px; color: #64748b; font-size: 12px; line-height: 1.6; }
+.pdf-report__generated { flex: 0 0 auto; color: #64748b; font-size: 11px; text-align: right; }
+.pdf-report__stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 20px 0; }
+.pdf-report__stat { padding: 13px; border: 1px solid #dbe3ef; border-radius: 8px; background: #f8fafc; }
+.pdf-report__stat span { display: block; color: #64748b; font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.pdf-report__stat strong { display: block; margin-top: 6px; color: #0f172a; font-size: 16px; }
+.pdf-report__stat--income { background: #ecfdf5; border-color: #a7f3d0; }
+.pdf-report__stat--expense { background: #fff7ed; border-color: #fed7aa; }
+.pdf-report__stat--debt { background: #fff1f2; border-color: #fecdd3; }
+.pdf-report__section { margin-top: 22px; break-inside: avoid; }
+.pdf-report__section h2 { margin-bottom: 9px; color: #0f172a; font-size: 15px; }
+.pdf-report__section-note { margin: -4px 0 9px; color: #64748b; font-size: 10px; }
+.pdf-report table { width: 100%; border-collapse: collapse; font-size: 10px; }
+.pdf-report thead { display: table-header-group; }
+.pdf-report th { padding: 8px 7px; color: #fff; background: #1e3a5f; font-weight: 700; text-align: left; }
+.pdf-report td { padding: 8px 7px; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
+.pdf-report tbody tr:nth-child(even) { background: #f8fafc; }
+.pdf-report .num { white-space: nowrap; text-align: right; }
+.pdf-report .status-pay { color: #be123c; font-weight: 700; }
+.pdf-report .status-receive { color: #0369a1; font-weight: 700; }
+.pdf-report .status-done { color: #047857; font-weight: 700; }
+.pdf-report__empty { padding: 14px; border: 1px dashed #cbd5e1; border-radius: 7px; color: #64748b; background: #f8fafc; font-size: 11px; text-align: center; }
+.pdf-report__notes { padding: 13px 16px; border-left: 4px solid #2563eb; background: #eff6ff; color: #334155; font-size: 10px; line-height: 1.6; }
+.pdf-report__notes ul { margin: 0; padding-left: 16px; }
+.pdf-report__footer { margin-top: 28px; padding-top: 10px; border-top: 1px solid #cbd5e1; color: #64748b; font-size: 9px; text-align: center; }
+
 /* ===================== Responsive ===================== */
 @media (max-width: 860px) {
   .form-grid--3 { grid-template-columns: 1fr 1fr; }
@@ -578,6 +625,14 @@ dialog::backdrop { background: rgba(20, 20, 19, .5); backdrop-filter: blur(3px);
 
   .toast { bottom: 76px; }
   .dialog-grid { grid-template-columns: 1fr; }
+  .pdf-dialog { width: 100%; height: 100dvh; max-height: 100dvh; border-radius: 0; }
+  .pdf-dialog__header, .pdf-dialog__actions { padding: 12px; }
+  .pdf-dialog__notice { padding: 9px 12px; }
+  .pdf-preview-scroll { padding: 10px; }
+  .pdf-report { min-height: 0; padding: 22px 18px; }
+  .pdf-report__header { flex-direction: column; }
+  .pdf-report__generated { text-align: left; }
+  .pdf-report__stats { grid-template-columns: 1fr 1fr; }
 }
 
 @media (max-width: 620px) {

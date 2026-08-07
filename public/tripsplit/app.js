@@ -17,7 +17,7 @@
     "equalSplitPreview", "expenseError", "btnCancelEdit", "btnSaveExpense", "expenseTableBody",
     "expenseEmpty", "expenseSearch", "summaryTableBody", "settlementList", "paymentHistoryList", "statTotal",
     "statExpenseCount", "statMemberCount", "statTransferCount", "toast", "btnNewTrip", "btnShareTrip", "btnEditTrip",
-    "btnDeleteTrip", "btnExportJson", "btnExportCsv", "fileImportJson", "btnSelectAll",
+    "btnDeleteTrip", "btnExportJson", "btnExportCsv", "btnPreviewPdf", "pdfPreviewDialog", "pdfReport", "btnClosePdfPreview", "btnCancelPdfPreview", "btnPrintPdf", "fileImportJson", "btnSelectAll",
     "btnClearParticipants", "tripDialog", "tripForm", "tripDialogTitle", "tripId", "tripName",
     "tripDestination", "tripStartDate", "tripEndDate", "tripStatusInput", "tripError",
     "btnCloseTripDialog", "btnCancelTrip", "accountBox", "accountName", "accountEmail",
@@ -581,6 +581,63 @@
     rows.push([], ["LỊCH SỬ ĐÃ THANH TOÁN"], ["Người trả", "Người nhận", "Số tiền", "Thời gian"]); payload.payments.forEach((r) => rows.push([r.fromName, r.toName, r.amount, r.paidAt]));
     download(`${safeFilename(payload.trip.name)}.csv`, "\uFEFF" + rows.map((r) => r.map(csvCell).join(",")).join("\r\n"), "text/csv;charset=utf-8");
   }
+
+  function reportBalanceStatus(row) {
+    if (row.balance < 0) return { label: "Còn phải trả", className: "status-pay" };
+    if (row.balance > 0) return { label: "Còn được nhận", className: "status-receive" };
+    return { label: row.transferred || row.received ? "Đã thanh toán" : "Đã cân bằng", className: "status-done" };
+  }
+
+  function buildPdfReport() {
+    const trip = activeTrip();
+    const summary = Logic.calculateOutstandingSummary(trip.members, trip.expenses, trip.payments);
+    const settlements = Logic.calculateSettlements(trip.members, trip.expenses, trip.payments);
+    const totalExpense = trip.expenses.reduce((sum, item) => sum + Logic.toSafeInteger(item.amount), 0);
+    const totalPrepaid = trip.members.reduce((sum, member) => sum + Logic.toSafeInteger(member.prepaidAmount), 0);
+    const totalOutstanding = Object.values(summary).filter((row) => row.balance < 0).reduce((sum, row) => sum + Math.abs(row.balance), 0);
+    const collectedDifference = totalPrepaid - totalExpense;
+    const generatedAt = new Intl.DateTimeFormat("vi-VN", { dateStyle: "full", timeStyle: "short" }).format(new Date());
+    const summaryRows = trip.members.map((member) => {
+      const row = summary[member.id];
+      const status = reportBalanceStatus(row);
+      return `<tr><td><strong>${escapeHtml(member.name)}</strong>${member.email ? `<br><small>${escapeHtml(member.email)}</small>` : ""}</td><td class="num">${formatCurrency(row.prepaid)}</td><td class="num">${formatCurrency(row.owed)}</td><td class="num">${formatCurrency(row.paid)}</td><td class="num">${formatCurrency(row.transferred)}</td><td class="num">${formatCurrency(row.received)}</td><td class="num ${status.className}">${row.balance > 0 ? "+" : ""}${formatCurrency(row.balance)}</td><td class="${status.className}">${status.label}</td></tr>`;
+    }).join("");
+    const settlementRows = settlements.map((item, index) => `<tr><td>${index + 1}</td><td><strong>${escapeHtml(item.fromName)}</strong></td><td>chuyển cho</td><td><strong>${escapeHtml(item.toName)}</strong></td><td class="num status-pay">${formatCurrency(item.amount)}</td><td>Chưa thanh toán</td></tr>`).join("");
+    const expenseRows = [...trip.expenses].sort((a, b) => String(a.date).localeCompare(String(b.date))).map((item, index) => `<tr><td>${index + 1}</td><td>${escapeHtml(formatExpenseDateTime(item.date))}</td><td><strong>${escapeHtml(item.description)}</strong>${item.note ? `<br><small>${escapeHtml(item.note)}</small>` : ""}</td><td>${escapeHtml(item.category || "Khác")}</td><td>${escapeHtml(memberName(item.payerId))}</td><td>${escapeHtml(item.participantIds.map(memberName).join(", "))}</td><td class="num"><strong>${formatCurrency(item.amount)}</strong><br><small>${formatCurrency(averagePerParticipant(item))}/người</small></td></tr>`).join("");
+    const paymentRows = [...trip.payments].sort((a, b) => String(b.paidAt).localeCompare(String(a.paidAt))).map((item, index) => `<tr><td>${index + 1}</td><td>${escapeHtml(formatExpenseDateTime(item.paidAt))}</td><td>${escapeHtml(memberName(item.fromId))}</td><td>${escapeHtml(memberName(item.toId))}</td><td class="num status-done">${formatCurrency(item.amount)}</td><td>Đã thanh toán</td></tr>`).join("");
+
+    return `<header class="pdf-report__header"><div><div class="pdf-report__brand">✈ TripSplit · Báo cáo thu chi</div><h1>${escapeHtml(trip.name)}</h1><div class="pdf-report__meta">${escapeHtml(trip.destination || "Chưa cập nhật điểm đến")} · ${escapeHtml(formatDateRange(trip))} · ${escapeHtml(statusLabel(trip.status))}<br>${trip.members.length} thành viên · ${trip.expenses.length} khoản chi</div></div><div class="pdf-report__generated">Ngày lập báo cáo<br><strong>${escapeHtml(generatedAt)}</strong></div></header>
+      <section class="pdf-report__stats"><div class="pdf-report__stat pdf-report__stat--income"><span>Đã thu tạm ứng</span><strong>${formatCurrency(totalPrepaid)}</strong></div><div class="pdf-report__stat pdf-report__stat--expense"><span>Tổng chi phí</span><strong>${formatCurrency(totalExpense)}</strong></div><div class="pdf-report__stat"><span>Thu trước - chi phí</span><strong>${collectedDifference > 0 ? "+" : ""}${formatCurrency(collectedDifference)}</strong></div><div class="pdf-report__stat pdf-report__stat--debt"><span>Công nợ còn lại</span><strong>${formatCurrency(totalOutstanding)}</strong></div></section>
+      <section class="pdf-report__section"><h2>1. Đối soát theo thành viên</h2><p class="pdf-report__section-note">Tạm ứng là khoản thu trước cố định; số dư chi phí được tính từ người thực trả và phần phải chịu.</p>${summaryRows ? `<table><thead><tr><th>Thành viên</th><th class="num">Tạm ứng</th><th class="num">Phải chịu</th><th class="num">Ứng chi phí</th><th class="num">Đã chuyển</th><th class="num">Đã nhận</th><th class="num">Còn lại</th><th>Trạng thái</th></tr></thead><tbody>${summaryRows}</tbody></table>` : '<div class="pdf-report__empty">Chưa có thành viên.</div>'}</section>
+      <section class="pdf-report__section"><h2>2. Ai còn nợ ai?</h2>${settlementRows ? `<table><thead><tr><th>STT</th><th>Người cần trả</th><th></th><th>Người cần nhận</th><th class="num">Số tiền</th><th>Trạng thái</th></tr></thead><tbody>${settlementRows}</tbody></table>` : '<div class="pdf-report__empty">✓ Chuyến đi hiện không còn giao dịch cần thanh toán.</div>'}</section>
+      <section class="pdf-report__section"><h2>3. Chi tiết các khoản chi</h2>${expenseRows ? `<table><thead><tr><th>STT</th><th>Ngày & giờ</th><th>Nội dung</th><th>Nhóm</th><th>Người trả</th><th>Người tham gia</th><th class="num">Số tiền</th></tr></thead><tbody>${expenseRows}</tbody></table>` : '<div class="pdf-report__empty">Chưa có khoản chi.</div>'}</section>
+      <section class="pdf-report__section"><h2>4. Lịch sử đã thanh toán</h2>${paymentRows ? `<table><thead><tr><th>STT</th><th>Thời gian</th><th>Người trả</th><th>Người nhận</th><th class="num">Số tiền</th><th>Trạng thái</th></tr></thead><tbody>${paymentRows}</tbody></table>` : '<div class="pdf-report__empty">Chưa có giao dịch được đánh dấu đã thanh toán.</div>'}</section>
+      <section class="pdf-report__section"><h2>5. Lưu ý cách đọc báo cáo</h2><div class="pdf-report__notes"><ul><li>“Đã thu tạm ứng” là khoản cố định khai báo trong hồ sơ thành viên và không tự thay đổi trong chuyến đi.</li><li>“Đã ứng chi phí” là số tiền thành viên trực tiếp thanh toán cho các hóa đơn.</li><li>Chỉ số “Thu trước - chi phí” dùng để tham khảo quy mô quỹ; công nợ thực tế căn cứ người trả, người tham gia và lịch sử thanh toán.</li><li>Số dư âm nghĩa là còn phải trả; số dư dương nghĩa là còn được nhận.</li></ul></div></section>
+      <footer class="pdf-report__footer">Báo cáo được tạo tự động bởi TripSplit · Vui lòng đối chiếu chứng từ trước khi quyết toán.</footer>`;
+  }
+
+  function openPdfPreview() {
+    dom.pdfReport.innerHTML = buildPdfReport();
+    if (!dom.pdfPreviewDialog.open) dom.pdfPreviewDialog.showModal();
+  }
+
+  function closePdfPreview() {
+    if (dom.pdfPreviewDialog.open) dom.pdfPreviewDialog.close();
+  }
+
+  function printPdfReport() {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) { showToast("Trình duyệt đang chặn cửa sổ lưu PDF. Hãy cho phép popup rồi thử lại."); return; }
+    printWindow.opener = null;
+    const stylesheetUrl = new URL("styles.css?v=15", window.location.href).toString();
+    const title = `Bao-cao-thu-chi-${safeFilename(activeTrip().name)}`;
+    printWindow.document.open();
+    printWindow.document.write(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title><link rel="stylesheet" href="${escapeHtml(stylesheetUrl)}"><style>@page{size:A4;margin:12mm}html,body{margin:0!important;background:#fff!important}.pdf-report{width:auto!important;min-height:0!important;margin:0!important;padding:0!important;box-shadow:none!important}.pdf-report__section{break-inside:auto}.pdf-report tr,.pdf-report__stat,.pdf-report__notes{break-inside:avoid}.pdf-report__footer{margin-top:18px}</style></head><body><article class="pdf-report">${dom.pdfReport.innerHTML}</article></body></html>`);
+    printWindow.document.close();
+    const triggerPrint = () => { printWindow.focus(); setTimeout(() => printWindow.print(), 250); };
+    if (printWindow.document.readyState === "complete") triggerPrint();
+    else printWindow.addEventListener("load", triggerPrint, { once: true });
+  }
   function setSheetStatus(state, title, message) {
     dom.sheetStatus.dataset.state = state;
     dom.sheetStatusTitle.textContent = title;
@@ -707,7 +764,7 @@
   dom.paymentHistoryList.addEventListener("click", (event) => { const button = event.target.closest("[data-undo-payment]"); if (button) undoPayment(button.dataset.undoPayment); });
   dom.expenseSearch.addEventListener("input", renderExpenses); dom.expenseAmount.addEventListener("input", () => { const value = parseMoney(dom.expenseAmount.value); dom.expenseAmount.value = value ? formatNumber(value) : ""; updateSplitEditor(); }); dom.participantList.addEventListener("change", updateSplitEditor); $$('input[name="splitMode"]').forEach((r) => r.addEventListener("change", updateSplitEditor)); dom.customShares.addEventListener("input", (event) => { const input = event.target.closest("[data-share-member]"); if (input) { if (!input.value.includes("%")) { const value = parseMoney(input.value); input.value = input.value.trim() ? formatNumber(value) : ""; } updateCustomSuggestions(); } });
   dom.btnSelectAll.addEventListener("click", () => { $$('input[name="participant"]').forEach((i) => { i.checked = true; }); updateSplitEditor(); }); dom.btnClearParticipants.addEventListener("click", () => { $$('input[name="participant"]').forEach((i) => { i.checked = false; }); updateSplitEditor(); }); dom.btnCancelEdit.addEventListener("click", resetExpenseForm);
-  dom.btnExportJson.addEventListener("click", () => download("trip-split-backup.json", JSON.stringify(portfolio, null, 2), "application/json;charset=utf-8")); dom.btnExportCsv.addEventListener("click", exportCsv); dom.fileImportJson.addEventListener("change", () => { if (dom.fileImportJson.files[0]) importJson(dom.fileImportJson.files[0]); }); dom.btnGenerateSecret.addEventListener("click", generateAppsScriptSecret); dom.btnCheckAppsScript.addEventListener("click", checkAppsScript); dom.btnShareSheet.addEventListener("click", shareSheet); dom.appsScriptUrl.addEventListener("change", () => { localStorage.setItem(SCRIPT_URL_KEY, dom.appsScriptUrl.value.trim()); setSheetStatus("idle", "Chưa kiểm tra kết nối", "URL đã thay đổi. Hãy kiểm tra lại trước khi tạo Sheet."); }); dom.appsScriptSecret.addEventListener("change", () => localStorage.setItem(SCRIPT_SECRET_KEY, dom.appsScriptSecret.value.trim()));
+  dom.btnExportJson.addEventListener("click", () => download("trip-split-backup.json", JSON.stringify(portfolio, null, 2), "application/json;charset=utf-8")); dom.btnExportCsv.addEventListener("click", exportCsv); dom.btnPreviewPdf.addEventListener("click", openPdfPreview); dom.btnClosePdfPreview.addEventListener("click", closePdfPreview); dom.btnCancelPdfPreview.addEventListener("click", closePdfPreview); dom.btnPrintPdf.addEventListener("click", printPdfReport); dom.fileImportJson.addEventListener("change", () => { if (dom.fileImportJson.files[0]) importJson(dom.fileImportJson.files[0]); }); dom.btnGenerateSecret.addEventListener("click", generateAppsScriptSecret); dom.btnCheckAppsScript.addEventListener("click", checkAppsScript); dom.btnShareSheet.addEventListener("click", shareSheet); dom.appsScriptUrl.addEventListener("change", () => { localStorage.setItem(SCRIPT_URL_KEY, dom.appsScriptUrl.value.trim()); setSheetStatus("idle", "Chưa kiểm tra kết nối", "URL đã thay đổi. Hãy kiểm tra lại trước khi tạo Sheet."); }); dom.appsScriptSecret.addEventListener("change", () => localStorage.setItem(SCRIPT_SECRET_KEY, dom.appsScriptSecret.value.trim()));
 
   async function initialize() {
     dom.appsScriptUrl.value = localStorage.getItem(SCRIPT_URL_KEY) || "";

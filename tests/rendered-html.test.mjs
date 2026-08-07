@@ -27,15 +27,24 @@ test("ships the professional TripSplit workspace and account controls", async ()
   assert.match(html, /id="btnOpenSheet"/);
   assert.match(html, /id="memberPrepaidAmount"/);
   assert.match(html, /Tạm ứng đã thu/);
+  assert.match(html, /id="btnPreviewPdf"/);
+  assert.match(html, /id="pdfPreviewDialog"/);
+  assert.match(html, /id="btnPrintPdf"/);
   assert.match(app, /fetch\("\/api\/me"/);
   assert.match(app, /fetch\("\/api\/account\/trips"/);
   assert.match(app, /loadSharedTripFromUrl/);
   assert.match(app, /navigator\.share/);
   assert.match(app, /Logic\.buildShareContent/);
   assert.match(app, /event\.key === "Escape"/);
+  assert.match(app, /function buildPdfReport/);
+  assert.match(app, /function openPdfPreview/);
+  assert.match(app, /window\.open\("", "_blank"\)/);
+  assert.match(app, /printWindow\.print\(\)/);
+  assert.match(app, /@page\{size:A4/);
   assert.match(css, /\.account-box/);
   assert.match(css, /\.share-menu/);
   assert.match(css, /\.member-advance-field/);
+  assert.match(css, /\.pdf-report__stats/);
 });
 
 test("keeps member advances fixed and separate from expense settlement", async () => {
