@@ -5,12 +5,13 @@
   const LEGACY_KEY = "trip-split-state-v1";
   const SCRIPT_URL_KEY = "trip-split-apps-script-url";
   const SCRIPT_SECRET_KEY = "trip-split-apps-script-secret";
+  const SHEET_LINKS_KEY = "trip-split-sheet-links";
   const Logic = window.TravelExpenseLogic;
   const $ = (selector) => document.querySelector(selector);
   const $$ = (selector) => Array.from(document.querySelectorAll(selector));
   const dom = Object.fromEntries([
     "tripSelect", "tripStatus", "tripTitle", "tripMeta", "saveStatus", "memberForm", "memberName",
-    "memberEmail", "memberError", "memberList", "btnSaveMember", "btnCancelMemberEdit", "appsScriptUrl", "appsScriptSecret", "btnGenerateSecret", "btnShareSheet", "sheetError",
+    "memberEmail", "memberError", "memberList", "btnSaveMember", "btnCancelMemberEdit", "appsScriptUrl", "appsScriptSecret", "btnGenerateSecret", "btnCheckAppsScript", "btnShareSheet", "btnOpenSheet", "sheetStatus", "sheetStatusTitle", "sheetStatusText", "sheetError",
     "expenseForm", "expenseFormTitle", "expenseDescription", "expenseAmount", "expensePayer",
     "expenseDate", "expenseCategory", "expenseNote", "participantList", "customShares",
     "equalSplitPreview", "expenseError", "btnCancelEdit", "btnSaveExpense", "expenseTableBody",
@@ -370,7 +371,7 @@
     dom.tripTitle.textContent = trip.name;
     dom.tripMeta.textContent = [trip.destination || "Chưa có điểm đến", formatDateRange(trip), `${trip.members.length} thành viên`].join(" · ");
     dom.btnShareTrip.textContent = "↗ Chia sẻ";
-    renderMembers(); renderPayerOptions(); renderParticipants(); renderExpenses(); renderSummary(); renderStats(); updateSplitEditor(); renderAccount();
+    renderMembers(); renderPayerOptions(); renderParticipants(); renderExpenses(); renderSummary(); renderStats(); updateSplitEditor(); renderAccount(); renderSheetLink();
   }
 
   function renderMembers() {
@@ -578,16 +579,82 @@
     rows.push([], ["LỊCH SỬ ĐÃ THANH TOÁN"], ["Người trả", "Người nhận", "Số tiền", "Thời gian"]); payload.payments.forEach((r) => rows.push([r.fromName, r.toName, r.amount, r.paidAt]));
     download(`${safeFilename(payload.trip.name)}.csv`, "\uFEFF" + rows.map((r) => r.map(csvCell).join(",")).join("\r\n"), "text/csv;charset=utf-8");
   }
-  function shareSheet() {
-    const url = dom.appsScriptUrl.value.trim(); dom.sheetError.textContent = "";
-    if (!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(url)) { dom.sheetError.textContent = "Hãy nhập Web App URL hợp lệ theo hướng dẫn cấu hình phía trên."; return; }
+  function setSheetStatus(state, title, message) {
+    dom.sheetStatus.dataset.state = state;
+    dom.sheetStatusTitle.textContent = title;
+    dom.sheetStatusText.textContent = message;
+  }
+  function savedSheetLinks() {
+    try { return JSON.parse(localStorage.getItem(SHEET_LINKS_KEY)) || {}; } catch { return {}; }
+  }
+  function renderSheetLink() {
+    const url = savedSheetLinks()[activeTrip().id];
+    dom.btnOpenSheet.classList.toggle("hidden", !url);
+    dom.btnOpenSheet.href = url || "#";
+  }
+  function setSheetBusy(busy) {
+    dom.btnCheckAppsScript.disabled = busy;
+    dom.btnShareSheet.disabled = busy;
+  }
+  function sheetConfig(requireSecret = false) {
+    const scriptUrl = dom.appsScriptUrl.value.trim();
+    const secret = dom.appsScriptSecret.value.trim();
+    dom.sheetError.textContent = "";
+    if (!/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(scriptUrl)) {
+      throw new Error("Web App URL không hợp lệ. Hãy dùng URL /exec từ deployment mới nhất.");
+    }
+    if (requireSecret && !secret) throw new Error("Hãy nhập mã bí mật khớp với TRIPSPLIT_SECRET.");
+    localStorage.setItem(SCRIPT_URL_KEY, scriptUrl);
+    if (secret) localStorage.setItem(SCRIPT_SECRET_KEY, secret);
+    return { scriptUrl, secret };
+  }
+  async function callSheetBridge(action) {
+    const config = sheetConfig(action === "sync");
+    const response = await fetch("/api/google-sheet", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, ...config, payload: action === "sync" ? buildSheetPayload() : undefined }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error || "Không thể kết nối Google Sheet.");
+    return result;
+  }
+  async function checkAppsScript() {
+    setSheetBusy(true);
+    setSheetStatus("checking", "Đang kiểm tra kết nối", "TripSplit đang xác minh URL và quyền truy cập Apps Script…");
+    try {
+      const result = await callSheetBridge("check");
+      setSheetStatus("success", "Kết nối hoạt động", result.message || "Apps Script sẵn sàng nhận dữ liệu.");
+      showToast("Kết nối Google Apps Script thành công.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Không thể kiểm tra Apps Script.";
+      dom.sheetError.textContent = message;
+      setSheetStatus("error", "Kết nối chưa sẵn sàng", message);
+    } finally { setSheetBusy(false); }
+  }
+  async function shareSheet() {
     if (!activeTrip().members.length) { dom.sheetError.textContent = "Trip chưa có thành viên."; return; }
-    localStorage.setItem(SCRIPT_URL_KEY, url);
-    const secret = dom.appsScriptSecret.value.trim(); if (!secret) { dom.sheetError.textContent = "Hãy nhập mã bí mật đã cấu hình trong Script Properties."; return; }
-    localStorage.setItem(SCRIPT_SECRET_KEY, secret);
-    const form = document.createElement("form"); form.method = "POST"; form.action = url; form.target = "_blank";
-    const input = document.createElement("textarea"); input.name = "payload"; input.value = JSON.stringify({ ...buildSheetPayload(), secret }); form.appendChild(input); form.hidden = true; document.body.appendChild(form); form.submit(); form.remove();
-    showToast("Đang tạo/cập nhật Sheet và cấp quyền thành viên…");
+    setSheetBusy(true);
+    setSheetStatus("checking", "Đang cập nhật Google Sheet", "Vui lòng giữ trang mở trong khi tạo báo cáo và cấp quyền thành viên…");
+    try {
+      const result = await callSheetBridge("sync");
+      if (result.sheetUrl) {
+        const links = savedSheetLinks();
+        links[activeTrip().id] = result.sheetUrl;
+        localStorage.setItem(SHEET_LINKS_KEY, JSON.stringify(links));
+        renderSheetLink();
+      }
+      const failedCount = Array.isArray(result.failedEmails) ? result.failedEmails.length : 0;
+      const detail = failedCount
+        ? `Sheet đã cập nhật, nhưng ${failedCount} email chưa được cấp quyền. Bạn có thể mở Sheet và chia sẻ thủ công.`
+        : result.message || "Sheet đã được cập nhật và chia sẻ thành công.";
+      setSheetStatus("success", "Google Sheet đã sẵn sàng", detail);
+      showToast("Đã tạo/cập nhật Google Sheet.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Không thể tạo Google Sheet.";
+      dom.sheetError.textContent = message;
+      setSheetStatus("error", "Không thể cập nhật Sheet", message);
+    } finally { setSheetBusy(false); }
   }
   function markSettlementPaid(fromId, toId, amount) {
     const trip = activeTrip(), value = Logic.toSafeInteger(amount);
@@ -638,11 +705,12 @@
   dom.paymentHistoryList.addEventListener("click", (event) => { const button = event.target.closest("[data-undo-payment]"); if (button) undoPayment(button.dataset.undoPayment); });
   dom.expenseSearch.addEventListener("input", renderExpenses); dom.expenseAmount.addEventListener("input", () => { const value = parseMoney(dom.expenseAmount.value); dom.expenseAmount.value = value ? formatNumber(value) : ""; updateSplitEditor(); }); dom.participantList.addEventListener("change", updateSplitEditor); $$('input[name="splitMode"]').forEach((r) => r.addEventListener("change", updateSplitEditor)); dom.customShares.addEventListener("input", (event) => { const input = event.target.closest("[data-share-member]"); if (input) { if (!input.value.includes("%")) { const value = parseMoney(input.value); input.value = input.value.trim() ? formatNumber(value) : ""; } updateCustomSuggestions(); } });
   dom.btnSelectAll.addEventListener("click", () => { $$('input[name="participant"]').forEach((i) => { i.checked = true; }); updateSplitEditor(); }); dom.btnClearParticipants.addEventListener("click", () => { $$('input[name="participant"]').forEach((i) => { i.checked = false; }); updateSplitEditor(); }); dom.btnCancelEdit.addEventListener("click", resetExpenseForm);
-  dom.btnExportJson.addEventListener("click", () => download("trip-split-backup.json", JSON.stringify(portfolio, null, 2), "application/json;charset=utf-8")); dom.btnExportCsv.addEventListener("click", exportCsv); dom.fileImportJson.addEventListener("change", () => { if (dom.fileImportJson.files[0]) importJson(dom.fileImportJson.files[0]); }); dom.btnGenerateSecret.addEventListener("click", generateAppsScriptSecret); dom.btnShareSheet.addEventListener("click", shareSheet); dom.appsScriptUrl.addEventListener("change", () => localStorage.setItem(SCRIPT_URL_KEY, dom.appsScriptUrl.value.trim())); dom.appsScriptSecret.addEventListener("change", () => localStorage.setItem(SCRIPT_SECRET_KEY, dom.appsScriptSecret.value.trim()));
+  dom.btnExportJson.addEventListener("click", () => download("trip-split-backup.json", JSON.stringify(portfolio, null, 2), "application/json;charset=utf-8")); dom.btnExportCsv.addEventListener("click", exportCsv); dom.fileImportJson.addEventListener("change", () => { if (dom.fileImportJson.files[0]) importJson(dom.fileImportJson.files[0]); }); dom.btnGenerateSecret.addEventListener("click", generateAppsScriptSecret); dom.btnCheckAppsScript.addEventListener("click", checkAppsScript); dom.btnShareSheet.addEventListener("click", shareSheet); dom.appsScriptUrl.addEventListener("change", () => { localStorage.setItem(SCRIPT_URL_KEY, dom.appsScriptUrl.value.trim()); setSheetStatus("idle", "Chưa kiểm tra kết nối", "URL đã thay đổi. Hãy kiểm tra lại trước khi tạo Sheet."); }); dom.appsScriptSecret.addEventListener("change", () => localStorage.setItem(SCRIPT_SECRET_KEY, dom.appsScriptSecret.value.trim()));
 
   async function initialize() {
     dom.appsScriptUrl.value = localStorage.getItem(SCRIPT_URL_KEY) || "";
     dom.appsScriptSecret.value = localStorage.getItem(SCRIPT_SECRET_KEY) || "";
+    renderSheetLink();
     dom.expenseDate.value = localDateString();
     await loadAccountTrips();
     await loadSharedTripFromUrl();

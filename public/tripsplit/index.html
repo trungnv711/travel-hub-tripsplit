@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#ffffff" />
   <meta name="description" content="Quản lý và chia chi phí cho nhiều chuyến đi, xuất và chia sẻ Google Sheet." />
   <title>TripSplit — Chia chi phí nhóm</title>
-  <link rel="stylesheet" href="styles.css?v=12" />
+  <link rel="stylesheet" href="styles.css?v=13" />
 </head>
 <body>
   <header class="appbar">
@@ -206,17 +206,27 @@
           <summary>Hướng dẫn cấu hình từng bước</summary>
           <ol>
             <li><a href="https://script.google.com/home/projects/create" target="_blank" rel="noopener">Tạo dự án Apps Script mới</a>.</li>
-            <li><a href="Code.gs" download="TripSplit-Code.gs">Tải Code.gs</a>, mở file rồi dán toàn bộ vào trình soạn thảo Apps Script và bấm Lưu.</li>
+            <li><a href="Code.gs" download="TripSplit-Code.gs">Tải Code.gs phiên bản mới</a>, thay toàn bộ mã cũ trong Apps Script rồi bấm Lưu.</li>
             <li>Vào <strong>Project Settings → Script Properties</strong>, thêm tên <code>TRIPSPLIT_SECRET</code> và dùng cùng mã bí mật bên dưới.</li>
-            <li>Chọn <strong>Deploy → New deployment → Web app</strong>; đặt <strong>Execute as: Me</strong> và <strong>Who has access: Anyone</strong>.</li>
+            <li>Nếu đã từng deploy: chọn <strong>Deploy → Manage deployments → Edit → New version → Deploy</strong>. Nếu chưa có: chọn <strong>New deployment → Web app</strong>.</li>
+            <li>Đặt <strong>Execute as: Me</strong> và <strong>Who has access: Anyone</strong>, sau đó cấp quyền Google yêu cầu.</li>
             <li>Cấp quyền, sao chép URL kết thúc bằng <code>/exec</code> rồi dán vào ô Web App URL.</li>
           </ol>
+          <p class="setup-guide__warning">URL cũ trả về 404 thì deployment đã bị xóa hoặc hết hiệu lực; bắt buộc tạo deployment mới.</p>
           <button id="btnGenerateSecret" class="link-button setup-guide__generate" type="button">Tạo mã bí mật an toàn</button>
         </details>
         <div class="field"><label for="appsScriptUrl">Google Apps Script Web App URL</label><input id="appsScriptUrl" type="url" placeholder="https://script.google.com/macros/s/.../exec" /></div>
         <div class="field"><label for="appsScriptSecret">Mã bí mật</label><input id="appsScriptSecret" type="password" placeholder="Khớp Script Property TRIPSPLIT_SECRET" autocomplete="off" /></div>
         <p class="helper-text">URL và mã bí mật chỉ lưu trên thiết bị này. Không gửi mã bí mật cho người khác.</p>
-        <button id="btnShareSheet" class="btn btn--sheet" type="button">Tạo / cập nhật & chia sẻ Sheet</button>
+        <div id="sheetStatus" class="integration-status" data-state="idle" aria-live="polite">
+          <span class="integration-status__dot" aria-hidden="true"></span>
+          <div><strong id="sheetStatusTitle">Chưa kiểm tra kết nối</strong><p id="sheetStatusText">Kiểm tra URL trước khi tạo hoặc cập nhật Sheet.</p></div>
+        </div>
+        <div class="sheet-actions">
+          <button id="btnCheckAppsScript" class="btn btn--soft" type="button">Kiểm tra kết nối</button>
+          <button id="btnShareSheet" class="btn btn--sheet" type="button">Tạo / cập nhật Sheet</button>
+          <a id="btnOpenSheet" class="btn btn--soft hidden" href="#" target="_blank" rel="noopener">Mở Sheet gần nhất</a>
+        </div>
         <p id="sheetError" class="field-error" aria-live="polite"></p>
       </section>
 
@@ -270,7 +280,7 @@
       });
     })();
   </script>
-  <script src="logic.js?v=12"></script>
-  <script src="app.js?v=12"></script>
+  <script src="logic.js?v=13"></script>
+  <script src="app.js?v=13"></script>
 </body>
 </html>

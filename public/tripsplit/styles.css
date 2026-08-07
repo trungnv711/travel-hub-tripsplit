@@ -401,6 +401,24 @@ input::placeholder { color: #aba8a3; }
 .setup-guide a { color: var(--primary-strong); font-weight: 650; }
 .setup-guide code { font-size: 12px; background: rgba(255,255,255,.6); padding: 1px 5px; border-radius: 4px; }
 .setup-guide__generate { margin-top: 4px; }
+.setup-guide__warning { margin: 10px 0 4px; padding: 9px 10px; border-radius: 8px; background: var(--orange-soft); color: var(--orange); font-weight: 650; }
+
+.integration-status {
+  display: grid; grid-template-columns: 12px minmax(0, 1fr); gap: 10px; align-items: start;
+  margin-top: 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 11px;
+  background: var(--surface-2);
+}
+.integration-status__dot { width: 9px; height: 9px; margin-top: 4px; border-radius: 50%; background: var(--muted); box-shadow: 0 0 0 4px var(--surface-3); }
+.integration-status strong { display: block; font-size: 13px; }
+.integration-status p { margin-top: 3px; color: var(--muted); font-size: 12px; line-height: 1.45; }
+.integration-status[data-state="checking"] .integration-status__dot { background: var(--orange); animation: sheet-pulse 1s ease-in-out infinite; }
+.integration-status[data-state="success"] { border-color: color-mix(in srgb, var(--success) 45%, var(--line)); background: var(--success-soft); }
+.integration-status[data-state="success"] .integration-status__dot { background: var(--success); }
+.integration-status[data-state="error"] { border-color: color-mix(in srgb, var(--danger) 45%, var(--line)); background: var(--danger-soft); }
+.integration-status[data-state="error"] .integration-status__dot { background: var(--danger); }
+.sheet-actions { display: grid; grid-template-columns: auto minmax(220px, 1fr) auto; gap: 10px; margin-top: 12px; }
+.sheet-actions .btn { width: 100%; margin-top: 0; }
+@keyframes sheet-pulse { 50% { opacity: .35; transform: scale(.8); } }
 
 .export-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .export-grid .btn { width: 100%; }
@@ -513,6 +531,7 @@ dialog::backdrop { background: rgba(20, 20, 19, .5); backdrop-filter: blur(3px);
   .trip-bar__actions .btn { flex: 1; }
   .share-control { flex: 1; }
   .share-control > .btn { width: 100%; }
+  .sheet-actions { grid-template-columns: 1fr; }
 
   /* Tabs become a bottom navigation bar */
   .tabs {

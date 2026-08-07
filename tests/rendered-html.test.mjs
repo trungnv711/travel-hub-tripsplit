@@ -22,6 +22,9 @@ test("ships the professional TripSplit workspace and account controls", async ()
   assert.match(html, /data-share-action="email"/);
   assert.match(html, /data-share-action="facebook"/);
   assert.match(html, /data-share-action="copy"/);
+  assert.match(html, /id="btnCheckAppsScript"/);
+  assert.match(html, /id="sheetStatus"/);
+  assert.match(html, /id="btnOpenSheet"/);
   assert.match(app, /fetch\("\/api\/me"/);
   assert.match(app, /fetch\("\/api\/account\/trips"/);
   assert.match(app, /loadSharedTripFromUrl/);
@@ -30,6 +33,25 @@ test("ships the professional TripSplit workspace and account controls", async ()
   assert.match(app, /event\.key === "Escape"/);
   assert.match(css, /\.account-box/);
   assert.match(css, /\.share-menu/);
+});
+
+test("checks and synchronizes Google Sheet through the protected bridge", async () => {
+  const [route, app, script] = await Promise.all([
+    read("app/api/google-sheet/route.ts"),
+    read("public/tripsplit/app.js"),
+    read("public/tripsplit/Code.gs"),
+  ]);
+
+  assert.match(route, /getChatGPTUser/);
+  assert.match(route, /script\\\.google\\\.com/);
+  assert.match(route, /MAX_PAYLOAD_BYTES/);
+  assert.match(route, /responseMode:\s*"json"/);
+  assert.match(app, /callSheetBridge\("check"\)/);
+  assert.match(app, /callSheetBridge\("sync"\)/);
+  assert.match(app, /SHEET_LINKS_KEY/);
+  assert.match(script, /LockService\.getScriptLock/);
+  assert.match(script, /responseMode === 'json'/);
+  assert.match(script, /failedEmails/);
 });
 
 test("builds safe, deduplicated share targets", async () => {

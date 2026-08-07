@@ -1,25 +1,42 @@
 /** TripSplit Google Apps Script bridge.
  * Deploy as Web app: Execute as "Me"; access "Anyone" (or your Workspace domain).
  */
-function doGet() {
+function doGet(e) {
+  if (e && e.parameter && e.parameter.health === '1') {
+    return jsonResult_({ ok: true, service: 'TripSplit Sheet Bridge', version: 3 });
+  }
   return HtmlService.createHtmlOutput('<h2>TripSplit Sheet Bridge đang hoạt động</h2><p>Quay lại TripSplit và dùng nút tạo/cập nhật Sheet.</p>');
 }
 
 function doPost(e) {
+  var data = {};
+  var lock = LockService.getScriptLock();
+  var locked = false;
   try {
-    var data = JSON.parse(e.parameter.payload || '{}');
+    data = JSON.parse((e && e.parameter && e.parameter.payload) || '{}');
     validateSecret_(data.secret);
     validatePayload_(data);
+    locked = lock.tryLock(30000);
+    if (!locked) throw new Error('Một yêu cầu khác đang cập nhật Sheet. Vui lòng thử lại sau ít phút.');
     var spreadsheet = getOrCreateSpreadsheet_(data.trip);
     writeOverview_(spreadsheet, data);
     writeExpenses_(spreadsheet, data);
     writeSettlements_(spreadsheet, data);
-    var sharedCount = shareWithMembers_(spreadsheet, data.trip.members);
+    var shareResult = shareWithMembers_(spreadsheet, data.trip.members);
     SpreadsheetApp.flush();
-    var shareMessage = sharedCount ? ' Đã cấp quyền cho ' + sharedCount + ' email thành viên.' : ' Chưa có email thành viên; bạn vẫn có thể chia sẻ link Sheet thủ công.';
-    return resultPage_('Hoàn tất', 'Google Sheet đã được cập nhật.' + shareMessage, spreadsheet.getUrl());
+    return response_(data, {
+      ok: true,
+      message: shareResult.sharedCount
+        ? 'Google Sheet đã được cập nhật và cấp quyền cho ' + shareResult.sharedCount + ' email thành viên.'
+        : 'Google Sheet đã được cập nhật. Chưa có email hợp lệ để cấp quyền tự động.',
+      sheetUrl: spreadsheet.getUrl(),
+      sharedCount: shareResult.sharedCount,
+      failedEmails: shareResult.failedEmails
+    });
   } catch (error) {
-    return resultPage_('Không thể tạo Sheet', error.message || String(error), '');
+    return response_(data, { ok: false, error: error.message || String(error) });
+  } finally {
+    if (locked && lock.hasLock()) lock.releaseLock();
   }
 }
 
@@ -179,9 +196,28 @@ function styleSheet_(sheet, frozenRows, columns) {
 function shareWithMembers_(spreadsheet, members) {
   var emails = members.map(function(member) { return String(member.email || '').trim().toLowerCase(); }).filter(function(email, index, all) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && all.indexOf(email) === index;
+  }).slice(0, 50);
+  var sharedCount = 0;
+  var failedEmails = [];
+  emails.forEach(function(email) {
+    try {
+      spreadsheet.addEditor(email);
+      sharedCount += 1;
+    } catch (error) {
+      failedEmails.push(email);
+    }
   });
-  if (emails.length) spreadsheet.addEditors(emails);
-  return emails.length;
+  return { sharedCount: sharedCount, failedEmails: failedEmails };
+}
+
+function response_(requestData, result) {
+  if (requestData && requestData.responseMode === 'json') return jsonResult_(result);
+  if (result.ok) return resultPage_('Hoàn tất', result.message, result.sheetUrl || '');
+  return resultPage_('Không thể tạo Sheet', result.error || 'Lỗi không xác định.', '');
+}
+
+function jsonResult_(value) {
+  return ContentService.createTextOutput(JSON.stringify(value)).setMimeType(ContentService.MimeType.JSON);
 }
 
 function resultPage_(title, message, url) {
