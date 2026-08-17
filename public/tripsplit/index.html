@@ -6,12 +6,12 @@
   <meta name="theme-color" content="#ffffff" />
   <meta name="description" content="Quản lý và chia chi phí cho nhiều chuyến đi, xuất và chia sẻ Google Sheet." />
   <title>TripSplit — Chia chi phí nhóm</title>
-  <link rel="stylesheet" href="styles.css?v=15" />
+  <link rel="stylesheet" href="styles.css?v=16" />
 </head>
 <body>
   <header class="appbar">
     <div class="brand">
-      <div class="brand__icon">✈️</div>
+      <button id="btnHome" class="brand__icon" type="button" title="Về trang chủ" aria-label="Về trang chủ TripSplit">✈️</button>
       <div class="brand__text">
         <h1>TripSplit</h1>
         <p>Chia chi phí nhóm, rõ ràng</p>
@@ -35,6 +35,25 @@
   </header>
 
   <main class="app">
+    <section id="homeView" class="home-view hidden" aria-labelledby="homeTitle">
+      <section class="home-hero">
+        <div class="home-hero__copy"><span class="eyebrow">Nhật ký hành trình & chi tiêu</span><h2 id="homeTitle">Đi nhiều hơn, đối soát nhẹ nhàng hơn.</h2><p>Một góc nhìn xuyên suốt cho mọi chuyến đi: đã đi đâu, chi bao nhiêu, ai đã ứng tiền và khoản nào vẫn đang chờ chốt.</p></div>
+        <button id="btnOpenCurrentTrip" class="btn btn--primary" type="button">Mở chuyến hiện tại →</button>
+      </section>
+
+      <section class="home-dashboard card">
+        <div class="section-title section-title--row"><div><span class="eyebrow">Dashboard chi tiêu</span><h2>Nhịp đi của bạn</h2><p id="homePeriodHint">Tổng hợp các khoản đã bật tính tiền.</p></div><label class="period-filter">Khoảng thời gian<select id="homePeriod"><option value="week">Tuần này</option><option value="month">Tháng này</option><option value="year" selected>Năm nay</option><option value="all">Tất cả</option></select></label></div>
+        <div class="home-kpis"><article><span>Chuyến có phát sinh</span><strong id="homeTripCount">0</strong></article><article><span>Tổng chi tiêu</span><strong id="homeTotalExpense">0 ₫</strong></article><article><span>Bình quân/người</span><strong id="homeAveragePerson">0 ₫</strong></article><article><span>Khoản đã chốt</span><strong id="homeExpenseCount">0</strong></article></div>
+        <div class="home-insights"><section><div class="section-title"><h3>Chi tiêu theo nhóm</h3><p>Nhìn nhanh tiền đang đi vào đâu.</p></div><div id="homeCategoryChart" class="category-chart"></div></section><section><div class="section-title"><h3>Những người đã ứng nhiều</h3><p>Càng ứng nhiều, càng nhận nhiều lời cảm ơn.</p></div><div id="homeContributorList" class="contributor-list"></div></section></div>
+      </section>
+
+      <section class="home-trips">
+        <div class="section-title section-title--row"><div><span class="eyebrow">Hành trình của bạn</span><h2>Từng chuyến, một câu chuyện rõ ràng</h2><p>Chi phí chỉ tính các khoản đang bật quyết toán.</p></div><button id="btnHomeNewTrip" class="btn btn--soft" type="button">+ Lên kế hoạch mới</button></div>
+        <div id="homeTripList" class="home-trip-list"></div>
+      </section>
+    </section>
+
+    <div id="workspaceView" class="workspace-view">
     <section class="trip-bar card">
       <div class="trip-bar__info">
         <span class="status-chip" id="tripStatus" data-status="planning">Đang chuẩn bị</span>
@@ -174,7 +193,7 @@
         <div class="section-title section-title--row"><div><h2>Danh sách chi phí</h2><p>Chỉ hiển thị dữ liệu của chuyến đi đang chọn.</p></div><input id="expenseSearch" class="search-input" type="search" placeholder="Tìm nội dung..." /></div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Nội dung</th><th>Ngày &amp; giờ</th><th>Người trả</th><th>Người tham gia</th><th class="align-right">Tổng tiền</th><th class="align-right">Tiền/người</th><th></th></tr></thead>
+            <thead><tr><th>Quyết toán</th><th>Nội dung</th><th>Ngày &amp; giờ</th><th>Người trả</th><th>Người tham gia</th><th class="align-right">Tổng tiền</th><th class="align-right">Tiền/người</th><th></th></tr></thead>
             <tbody id="expenseTableBody"></tbody>
           </table>
         </div>
@@ -246,6 +265,7 @@
         </div>
       </section>
     </section>
+    </div>
   </main>
 
   <dialog id="tripDialog">
@@ -302,7 +322,9 @@
       });
     })();
   </script>
-  <script src="logic.js?v=15"></script>
-  <script src="app.js?v=15"></script>
+  <script src="logic.js?v=16"></script>
+  <script src="report.js?v=16"></script>
+  <script src="dashboard.js?v=16"></script>
+  <script src="app.js?v=16"></script>
 </body>
 </html>

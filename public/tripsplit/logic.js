@@ -37,6 +37,14 @@
     return splitEqual(expense.amount, expense.participantIds);
   }
 
+  function isExpenseIncluded(expense) {
+    return Boolean(expense) && expense.included !== false;
+  }
+
+  function includedExpenses(expenses) {
+    return (Array.isArray(expenses) ? expenses : []).filter(isExpenseIncluded);
+  }
+
   function calculateSummary(members, expenses) {
     const summary = Object.fromEntries(
       (members || []).map((member) => [
@@ -52,7 +60,7 @@
       ])
     );
 
-    (expenses || []).forEach((expense) => {
+    includedExpenses(expenses).forEach((expense) => {
       if (summary[expense.payerId]) {
         summary[expense.payerId].paid += toSafeInteger(expense.amount);
       }
@@ -183,6 +191,9 @@
       if (new Set(expense.participantIds).size !== expense.participantIds.length) {
         return { valid: false, message: `Khoản "${expense.description}" bị trùng người tham gia.` };
       }
+      if (expense.included !== undefined && typeof expense.included !== "boolean") {
+        return { valid: false, message: `Khoản "${expense.description}" có trạng thái quyết toán không hợp lệ.` };
+      }
       const splitMode = expense.splitMode || "equal";
       if (!["equal", "custom"].includes(splitMode)) {
         return { valid: false, message: `Khoản "${expense.description}" có cách chia không hợp lệ.` };
@@ -260,6 +271,8 @@
     toSafeInteger,
     splitEqual,
     getExpenseShares,
+    isExpenseIncluded,
+    includedExpenses,
     calculateSummary,
     calculateOutstandingSummary,
     calculateSettlements,

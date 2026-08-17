@@ -80,7 +80,7 @@ function getSheet_(spreadsheet, name) {
 function writeOverview_(spreadsheet, data) {
   var trip = data.trip;
   var sheet = getSheet_(spreadsheet, 'Tổng quan');
-  var totalExpense = trip.expenses.reduce(function(sum, item) { return sum + Number(item.amount || 0); }, 0);
+  var totalExpense = trip.expenses.reduce(function(sum, item) { return item.included === false ? sum : sum + Number(item.amount || 0); }, 0);
   var totalPrepaid = data.summary.reduce(function(sum, item) { return sum + Number(item.prepaid || 0); }, 0);
   var rows = [
     ['TRIPSPLIT — BÁO CÁO QUYẾT TOÁN CHUYẾN ĐI', '', '', '', '', '', '', '', '', ''],
@@ -140,23 +140,25 @@ function writeExpenses_(spreadsheet, data) {
   var sheet = getSheet_(spreadsheet, 'Chi phí');
   var memberNames = {};
   data.trip.members.forEach(function(member) { memberNames[member.id] = member.name; });
-  var rows = [['STT', 'Nội dung', 'Ngày & giờ', 'Nhóm', 'Tổng tiền', 'Tổng tiền/người', 'Người ứng', 'Người tham gia', 'Phân bổ chi tiết', 'Ghi chú']];
+  var rows = [['STT', 'Quyết toán', 'Nội dung', 'Ngày & giờ', 'Nhóm', 'Tổng tiền', 'Tổng tiền/người', 'Người ứng', 'Người tham gia', 'Phân bổ chi tiết', 'Ghi chú']];
   data.trip.expenses.forEach(function(item, index) {
     var allocation = Object.keys(item.shares || {}).map(function(memberId) { return (memberNames[memberId] || memberId) + ': ' + formatMoney_(item.shares[memberId]); }).join('\n');
-    rows.push([index + 1, item.description, parseExpenseDate_(item.date), item.category || '', item.amount, item.averagePerPerson || 0, item.payerName, item.participantNames.join(', '), allocation, item.note || '']);
+    rows.push([index + 1, item.included === false ? 'KẾ HOẠCH - CHƯA TÍNH' : 'ĐANG TÍNH', item.description, parseExpenseDate_(item.date), item.category || '', item.amount, item.averagePerPerson || 0, item.payerName, item.participantNames.join(', '), allocation, item.note || '']);
   });
-  sheet.getRange(1, 1, rows.length, 10).setValues(rows);
-  styleSheet_(sheet, 1, 10);
+  sheet.getRange(1, 1, rows.length, 11).setValues(rows);
+  styleSheet_(sheet, 1, 11);
   if (rows.length > 1) {
-    sheet.getRange(2, 3, rows.length - 1, 1).setNumberFormat('dd/MM/yyyy HH:mm');
-    sheet.getRange(2, 5, rows.length - 1, 2).setNumberFormat('#,##0 [$₫-vi-VN]');
-    sheet.getRange(1, 1, rows.length, 10).applyRowBanding(SpreadsheetApp.BandingTheme.LIGHT_GREY, true, false);
-    sheet.getRange(1, 1, 1, 10).setBackground('#1d4ed8').setFontColor('#ffffff').setFontWeight('bold');
+    sheet.getRange(2, 4, rows.length - 1, 1).setNumberFormat('dd/MM/yyyy HH:mm');
+    sheet.getRange(2, 6, rows.length - 1, 2).setNumberFormat('#,##0 [$₫-vi-VN]');
+    sheet.getRange(1, 1, rows.length, 11).applyRowBanding(SpreadsheetApp.BandingTheme.LIGHT_GREY, true, false);
+    sheet.getRange(1, 1, 1, 11).setBackground('#1d4ed8').setFontColor('#ffffff').setFontWeight('bold');
+    data.trip.expenses.forEach(function(item, index) { if (item.included === false) sheet.getRange(index + 2, 1, 1, 11).setBackground('#f1f5f9').setFontColor('#64748b'); });
   }
-  sheet.getRange(1, 1, rows.length, 10).createFilter();
-  sheet.setColumnWidth(2, 220);
-  sheet.setColumnWidth(8, 220);
-  sheet.setColumnWidth(9, 240);
+  sheet.getRange(1, 1, rows.length, 11).createFilter();
+  sheet.setColumnWidth(2, 150);
+  sheet.setColumnWidth(3, 220);
+  sheet.setColumnWidth(9, 220);
+  sheet.setColumnWidth(10, 240);
   sheet.setTabColor('#f59e0b');
 }
 

@@ -30,6 +30,9 @@ test("ships the professional TripSplit workspace and account controls", async ()
   assert.match(html, /id="btnPreviewPdf"/);
   assert.match(html, /id="pdfPreviewDialog"/);
   assert.match(html, /id="btnPrintPdf"/);
+  assert.match(html, /id="btnHome"/);
+  assert.match(html, /id="homeView"/);
+  assert.match(html, /id="homePeriod"/);
   assert.match(app, /fetch\("\/api\/me"/);
   assert.match(app, /fetch\("\/api\/account\/trips"/);
   assert.match(app, /loadSharedTripFromUrl/);
@@ -41,10 +44,39 @@ test("ships the professional TripSplit workspace and account controls", async ()
   assert.match(app, /window\.open\("", "_blank"\)/);
   assert.match(app, /printWindow\.print\(\)/);
   assert.match(app, /@page\{size:A4/);
+  assert.match(app, /Dashboard\.aggregate/);
+  assert.match(app, /setExpenseIncluded/);
+  assert.match(app, /data-toggle-expense/);
   assert.match(css, /\.account-box/);
   assert.match(css, /\.share-menu/);
   assert.match(css, /\.member-advance-field/);
   assert.match(css, /\.pdf-report__stats/);
+  assert.match(css, /\.home-trip-list/);
+  assert.match(css, /\.expense-toggle/);
+});
+
+test("excludes planned expenses from settlement, dashboard, and report totals", async () => {
+  await import(new URL("public/tripsplit/logic.js", root));
+  await import(new URL("public/tripsplit/report.js", root));
+  await import(new URL("public/tripsplit/dashboard.js", root));
+  const Logic = globalThis.TravelExpenseLogic;
+  const Report = globalThis.TravelExpenseReport;
+  const Dashboard = globalThis.TravelDashboard;
+  const members = [{ id: "an", name: "An" }, { id: "binh", name: "Bình" }];
+  const trip = { id: "trip-1", name: "Đà Lạt", startDate: "2026-08-10", members, payments: [], expenses: [
+    { id: "e1", description: "Phòng", amount: 1_000_000, payerId: "an", participantIds: ["an", "binh"], splitMode: "equal", category: "Lưu trú", date: "2026-08-10", included: true },
+    { id: "e2", description: "Xe dự kiến", amount: 800_000, payerId: "binh", participantIds: ["an", "binh"], splitMode: "equal", category: "Di chuyển", date: "2026-08-11", included: false },
+  ] };
+  const summary = Logic.calculateSummary(members, trip.expenses);
+  assert.equal(summary.an.paid, 1_000_000);
+  assert.equal(summary.binh.paid, 0);
+  assert.equal(summary.an.owed, 500_000);
+  const report = Report.buildModel(trip, Logic);
+  assert.equal(report.totalExpense, 1_000_000);
+  assert.equal(report.plannedTotal, 800_000);
+  const dashboard = Dashboard.aggregate({ trips: [trip] }, Logic, "all", new Date("2026-08-17"));
+  assert.equal(dashboard.total, 1_000_000);
+  assert.equal(dashboard.expenseCount, 1);
 });
 
 test("keeps member advances fixed and separate from expense settlement", async () => {

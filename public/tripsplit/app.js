@@ -7,6 +7,8 @@
   const SCRIPT_SECRET_KEY = "trip-split-apps-script-secret";
   const SHEET_LINKS_KEY = "trip-split-sheet-links";
   const Logic = window.TravelExpenseLogic;
+  const Report = window.TravelExpenseReport;
+  const Dashboard = window.TravelDashboard;
   const $ = (selector) => document.querySelector(selector);
   const $$ = (selector) => Array.from(document.querySelectorAll(selector));
   const dom = Object.fromEntries([
@@ -22,7 +24,7 @@
     "tripDestination", "tripStartDate", "tripEndDate", "tripStatusInput", "tripError",
     "btnCloseTripDialog", "btnCancelTrip", "accountBox", "accountName", "accountEmail",
     "btnSignIn", "btnSignOut", "shareControl", "shareMenu", "shareMenuHint", "shareNative",
-    "shareEmail", "shareEmailHint"
+    "shareEmail", "shareEmailHint", "btnHome", "homeView", "workspaceView", "btnOpenCurrentTrip", "btnHomeNewTrip", "homePeriod", "homePeriodHint", "homeTripCount", "homeTotalExpense", "homeAveragePerson", "homeExpenseCount", "homeCategoryChart", "homeContributorList", "homeTripList"
   ].map((id) => [id, document.getElementById(id)]));
 
   let portfolio = loadPortfolio();
@@ -35,6 +37,7 @@
   let account = null;
   let preparedShareUrl = "";
   let sharePreparationToken = 0;
+  let currentView = "workspace";
   const SHARE_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
   function uid(prefix) {
@@ -81,25 +84,26 @@
     const people = (prefix, names) => names.map((name, index) => ({ id: `${prefix}_m${index + 1}`, name, email: "", prepaidAmount: 0 }));
     const dalatMembers = people("dl", ["An", "Bình", "Chi", "Dũng", "Giang", "Hà", "Khang", "Lan", "Minh", "Ngọc"]);
     const baolocMembers = people("bl", ["An", "Bình", "Chi", "Dũng", "Hà", "Lan", "Minh", "Phúc"]);
-    const expense = (id, description, amount, payerId, participantIds, category, date) => ({ id, description, amount, payerId, participantIds, splitMode: "equal", customShares: {}, category, date, note: "", createdAt: now() });
+    const expense = (id, description, amount, payerId, participantIds, category, date) => ({ id, description, amount, payerId, participantIds, splitMode: "equal", customShares: {}, category, date, note: "", included: true, createdAt: now() });
     const dalat = makeTrip({ id: "trip_da_lat", name: "Trip 1 — Đà Lạt", destination: "Đà Lạt", startDate: "2026-08-15", endDate: "2026-08-17", status: "planning", members: dalatMembers });
     dalat.expenses = [expense("dl_e1", "Đặt cọc villa", 6000000, dalatMembers[0].id, dalatMembers.map((m) => m.id), "Lưu trú", "2026-08-01")];
     const baoloc = makeTrip({ id: "trip_bao_loc", name: "Trip 2 — Bảo Lộc", destination: "Bảo Lộc", startDate: "2026-09-05", endDate: "2026-09-06", status: "planning", members: baolocMembers });
     baoloc.expenses = [expense("bl_e1", "Đặt xe khứ hồi", 3200000, baolocMembers[1].id, baolocMembers.map((m) => m.id), "Di chuyển", "2026-08-03")];
-    return { version: 2, activeTripId: dalat.id, trips: [dalat, baoloc] };
+    return { version: 3, activeTripId: dalat.id, trips: [dalat, baoloc] };
   }
 
   function migrateLegacy(legacy) {
-    const trip = makeTrip({ name: String(legacy.tripName || "Chuyến đi đã nhập"), members: legacy.members.map((m) => ({ ...m, email: m.email || "", prepaidAmount: Logic.toSafeInteger(m.prepaidAmount) })), expenses: legacy.expenses });
-    return { version: 2, activeTripId: trip.id, trips: [trip] };
+    const trip = makeTrip({ name: String(legacy.tripName || "Chuyến đi đã nhập"), members: legacy.members.map((m) => ({ ...m, email: m.email || "", prepaidAmount: Logic.toSafeInteger(m.prepaidAmount) })), expenses: legacy.expenses.map((expense) => ({ ...expense, included: expense.included !== false })) });
+    return { version: 3, activeTripId: trip.id, trips: [trip] };
   }
 
   function normalizePortfolio(candidate) {
-    candidate.version = 2;
+    candidate.version = 3;
     candidate.trips.forEach((trip) => {
       trip.destination ||= ""; trip.startDate ||= ""; trip.endDate ||= ""; trip.status ||= "planning";
       trip.payments ||= [];
       trip.members.forEach((member) => { member.email ||= ""; member.prepaidAmount = Logic.toSafeInteger(member.prepaidAmount); });
+      trip.expenses.forEach((expense) => { expense.included = expense.included !== false; });
     });
     return candidate;
   }
@@ -178,6 +182,7 @@
       accountTrips.forEach((trip) => {
         trip.payments ||= [];
         trip.members.forEach((member) => { member.email ||= ""; member.prepaidAmount = Logic.toSafeInteger(member.prepaidAmount); });
+        trip.expenses.forEach((expense) => { expense.included = expense.included !== false; });
         const index = portfolio.trips.findIndex((item) => item.shareId === trip.shareId || item.id === trip.id);
         if (index >= 0) portfolio.trips[index] = trip;
         else portfolio.trips.push(trip);
@@ -349,6 +354,8 @@
       if (!response.ok) throw new Error(result.error || "Không thể tải chuyến đi.");
       if (!Logic.validateTrip(result.trip).valid) throw new Error("Dữ liệu chuyến đi trên máy chủ không hợp lệ.");
       const sharedTrip = { ...result.trip, payments: Array.isArray(result.trip.payments) ? result.trip.payments : [], shareId, shareRevision: result.revision };
+      sharedTrip.members.forEach((member) => { member.email ||= ""; member.prepaidAmount = Logic.toSafeInteger(member.prepaidAmount); });
+      sharedTrip.expenses.forEach((expense) => { expense.included = expense.included !== false; });
       isApplyingSharedTrip = true;
       const index = portfolio.trips.findIndex((trip) => trip.shareId === shareId || trip.id === sharedTrip.id);
       if (index >= 0) portfolio.trips[index] = sharedTrip; else portfolio.trips.unshift(sharedTrip);
@@ -359,6 +366,51 @@
       showToast(error instanceof Error ? error.message : "Không thể tải chuyến đi.");
       dom.saveStatus.textContent = "Không tải được dữ liệu chung";
     } finally { isApplyingSharedTrip = false; }
+  }
+
+  function showHome() {
+    currentView = "home";
+    dom.homeView.classList.remove("hidden");
+    dom.workspaceView.classList.add("hidden");
+    document.body.classList.add("home-mode");
+    renderHome();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function showWorkspace() {
+    currentView = "workspace";
+    dom.homeView.classList.add("hidden");
+    dom.workspaceView.classList.remove("hidden");
+    document.body.classList.remove("home-mode");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function renderHome() {
+    const period = dom.homePeriod.value || "year";
+    const metrics = Dashboard.aggregate(portfolio, Logic, period);
+    const periodLabels = { week: "tuần này", month: "tháng này", year: "năm nay", all: "toàn bộ lịch sử" };
+    dom.homePeriodHint.textContent = `Tổng hợp các khoản đã bật tính tiền trong ${periodLabels[period]}.`;
+    dom.homeTripCount.textContent = metrics.activeTripCount;
+    dom.homeTotalExpense.textContent = formatCurrency(metrics.total);
+    dom.homeAveragePerson.textContent = formatCurrency(metrics.averagePerPerson);
+    dom.homeExpenseCount.textContent = metrics.expenseCount;
+
+    const maxCategory = metrics.categories[0]?.amount || 0;
+    dom.homeCategoryChart.innerHTML = metrics.categories.length ? metrics.categories.map((item) => {
+      const percent = maxCategory ? Math.max(6, Math.round((item.amount / maxCategory) * 100)) : 0;
+      return `<div class="category-row"><div><strong>${escapeHtml(item.name)}</strong><span>${formatCurrency(item.amount)}</span></div><div class="category-track"><span style="--bar:${percent}%"></span></div></div>`;
+    }).join("") : '<div class="home-empty">Chưa có chi phí đã chốt trong khoảng thời gian này.</div>';
+
+    dom.homeContributorList.innerHTML = metrics.payers.length ? metrics.payers.slice(0, 6).map((item, index) => `<article class="contributor-item"><span class="contributor-rank">${index + 1}</span><div><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.tripName)}</small></div><div class="contributor-thanks" title="Lời cảm ơn theo mức đã ứng">${"🙏".repeat(item.thanks)}</div><span class="contributor-amount">${formatCurrency(item.amount)}</span></article>`).join("") : '<div class="home-empty">Chưa có người ứng chi phí trong khoảng thời gian này.</div>';
+
+    dom.homeTripList.innerHTML = metrics.tripSummaries.length ? metrics.tripSummaries.map((item) => {
+      const trip = item.trip;
+      const topPayerEntry = Object.entries(item.payers).sort((a, b) => b[1] - a[1])[0];
+      const topPayer = topPayerEntry ? trip.members.find((member) => member.id === topPayerEntry[0]) : null;
+      const categories = Object.entries(item.categories).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([name]) => name).join(" · ") || "Chưa có hoạt động";
+      const memberCosts = item.memberCosts.map((member) => `<span><strong>${escapeHtml(member.name)}</strong><small>${formatCurrency(member.amount)}</small></span>`).join("");
+      return `<article class="home-trip-card"><div class="home-trip-card__top"><span class="status-chip" data-status="${escapeHtml(trip.status)}">${escapeHtml(statusLabel(trip.status))}</span><span>${escapeHtml(formatDateRange(trip))}</span></div><h3>${escapeHtml(trip.name)}</h3><p class="home-trip-card__destination">📍 ${escapeHtml(trip.destination || "Chưa cập nhật điểm đến")}</p><div class="home-trip-card__stats"><span><small>Thành viên</small><strong>${trip.members.length}</strong></span><span><small>Tổng chi</small><strong>${formatCurrency(item.total)}</strong></span><span><small>Bình quân/người</small><strong>${formatCurrency(item.averagePerMember)}</strong></span></div><div class="home-trip-card__story"><p><strong>Đã trải nghiệm:</strong> ${escapeHtml(categories)}</p><p><strong>Chi phí cao nhất:</strong> ${item.highestExpense ? `${escapeHtml(item.highestExpense.description)} · ${formatCurrency(item.highestExpense.amount)}` : "Chưa có"}</p><p><strong>Ứng nhiều nhất:</strong> ${topPayer ? `${escapeHtml(topPayer.name)} 🙏🙏🙏` : "Chưa có"}</p>${item.plannedCount ? `<p class="planned-note">${item.plannedCount} khoản đang chờ chốt, chưa tính vào tổng.</p>` : ""}</div><details class="home-member-costs"><summary>Chi phí từng người</summary><div>${memberCosts || "Chưa có thành viên"}</div></details><button class="btn btn--soft" type="button" data-open-home-trip="${escapeHtml(trip.id)}">Mở chuyến đi →</button></article>`;
+    }).join("") : '<div class="home-empty">Chưa có chuyến đi. Hãy bắt đầu hành trình đầu tiên.</div>';
   }
 
   function render() {
@@ -372,6 +424,7 @@
     dom.tripMeta.textContent = [trip.destination || "Chưa có điểm đến", formatDateRange(trip), `${trip.members.length} thành viên`].join(" · ");
     dom.btnShareTrip.textContent = "↗ Chia sẻ";
     renderMembers(); renderPayerOptions(); renderParticipants(); renderExpenses(); renderSummary(); renderStats(); updateSplitEditor(); renderAccount(); renderSheetLink();
+    if (currentView === "home") showHome(); else showWorkspace();
   }
 
   function renderMembers() {
@@ -398,9 +451,18 @@
 
   function renderExpenses() {
     const keyword = dom.expenseSearch.value.trim().toLocaleLowerCase("vi");
-    const expenses = activeTrip().expenses.filter((e) => `${e.description} ${e.category || ""} ${e.note || ""}`.toLocaleLowerCase("vi").includes(keyword));
+    const expenses = activeTrip().expenses.filter((e) => `${e.description} ${e.category || ""} ${e.note || ""} ${Logic.isExpenseIncluded(e) ? "đang tính" : "kế hoạch"}`.toLocaleLowerCase("vi").includes(keyword));
     dom.expenseEmpty.classList.toggle("hidden", !!expenses.length);
-    dom.expenseTableBody.innerHTML = expenses.map((e) => `<tr><td><div class="expense-main">${escapeHtml(e.description)}</div><div class="expense-sub">${escapeHtml(e.category || "Khác")}${e.note ? ` · ${escapeHtml(e.note)}` : ""}</div></td><td>${escapeHtml(formatExpenseDateTime(e.date))}</td><td><strong>${escapeHtml(memberName(e.payerId))}</strong></td><td><div class="pill-group">${e.participantIds.map((id) => `<span class="pill">${escapeHtml(memberName(id))}</span>`).join("")}</div></td><td class="align-right amount">${formatCurrency(e.amount)}</td><td class="align-right per-person"><strong>${formatCurrency(averagePerParticipant(e))}</strong><small>${e.participantIds.length} người</small></td><td><div class="row-actions"><button class="icon-button" type="button" data-edit-expense="${escapeHtml(e.id)}" title="Sửa">✎</button><button class="icon-button icon-button--danger" type="button" data-delete-expense="${escapeHtml(e.id)}" title="Xóa">🗑</button></div></td></tr>`).join("");
+    dom.expenseTableBody.innerHTML = expenses.map((e) => { const included = Logic.isExpenseIncluded(e); return `<tr class="${included ? "" : "expense-row--planned"}"><td><label class="expense-toggle"><input type="checkbox" role="switch" data-toggle-expense="${escapeHtml(e.id)}" ${included ? "checked" : ""} aria-label="${included ? "Đang tính" : "Chưa tính"} khoản ${escapeHtml(e.description)}"><span aria-hidden="true"></span><small>${included ? "Đang tính" : "Kế hoạch"}</small></label></td><td><div class="expense-main">${escapeHtml(e.description)}</div><div class="expense-sub">${escapeHtml(e.category || "Khác")}${e.note ? ` · ${escapeHtml(e.note)}` : ""}</div></td><td>${escapeHtml(formatExpenseDateTime(e.date))}</td><td><strong>${escapeHtml(memberName(e.payerId))}</strong></td><td><div class="pill-group">${e.participantIds.map((id) => `<span class="pill">${escapeHtml(memberName(id))}</span>`).join("")}</div></td><td class="align-right amount">${formatCurrency(e.amount)}</td><td class="align-right per-person"><strong>${formatCurrency(averagePerParticipant(e))}</strong><small>${e.participantIds.length} người</small></td><td><div class="row-actions"><button class="icon-button" type="button" data-edit-expense="${escapeHtml(e.id)}" title="Sửa">✎</button><button class="icon-button icon-button--danger" type="button" data-delete-expense="${escapeHtml(e.id)}" title="Xóa">🗑</button></div></td></tr>`; }).join("");
+  }
+
+  function setExpenseIncluded(id, included) {
+    const expense = activeTrip().expenses.find((item) => item.id === id);
+    if (!expense) return;
+    expense.included = Boolean(included);
+    savePortfolio(expense.included ? "Đã đưa khoản chi vào quyết toán" : "Đã chuyển khoản chi sang kế hoạch");
+    render();
+    showToast(expense.included ? `Đã bật tính tiền cho “${expense.description}”.` : `“${expense.description}” chưa được tính vào công nợ.`);
   }
 
   function renderSummary() {
@@ -420,8 +482,9 @@
   }
   function renderStats() {
     const trip = activeTrip();
-    dom.statTotal.textContent = formatCurrency(trip.expenses.reduce((sum, e) => sum + e.amount, 0));
-    dom.statExpenseCount.textContent = trip.expenses.length;
+    const included = Logic.includedExpenses(trip.expenses);
+    dom.statTotal.textContent = formatCurrency(included.reduce((sum, e) => sum + e.amount, 0));
+    dom.statExpenseCount.textContent = included.length === trip.expenses.length ? String(included.length) : `${included.length}/${trip.expenses.length}`;
     dom.statMemberCount.textContent = trip.members.length;
     dom.statTransferCount.textContent = Logic.calculateSettlements(trip.members, trip.expenses, trip.payments).length;
   }
@@ -571,11 +634,11 @@
   function buildSheetPayload() {
     const trip = activeTrip(), summary = Logic.calculateOutstandingSummary(trip.members, trip.expenses, trip.payments), settlements = Logic.calculateSettlements(trip.members, trip.expenses, trip.payments);
     const payments = trip.payments.map((payment) => ({ ...payment, fromName: memberName(payment.fromId), toName: memberName(payment.toId) }));
-    return { version: 2, trip: { id: trip.id, name: trip.name, destination: trip.destination, startDate: trip.startDate, endDate: trip.endDate, status: statusLabel(trip.status), members: trip.members, expenses: trip.expenses.map((e) => ({ ...e, averagePerPerson: averagePerParticipant(e), payerName: memberName(e.payerId), participantNames: e.participantIds.map(memberName), shares: Logic.getExpenseShares(e) })) }, summary: trip.members.map((m) => ({ ...summary[m.id], email: m.email || "", prepaid: Logic.toSafeInteger(m.prepaidAmount) })), settlements, payments, generatedAt: now() };
+    return { version: 3, trip: { id: trip.id, name: trip.name, destination: trip.destination, startDate: trip.startDate, endDate: trip.endDate, status: statusLabel(trip.status), members: trip.members, expenses: trip.expenses.map((e) => ({ ...e, included: Logic.isExpenseIncluded(e), averagePerPerson: averagePerParticipant(e), payerName: memberName(e.payerId), participantNames: e.participantIds.map(memberName), shares: Logic.getExpenseShares(e) })) }, summary: trip.members.map((m) => ({ ...summary[m.id], email: m.email || "", prepaid: Logic.toSafeInteger(m.prepaidAmount) })), settlements, payments, generatedAt: now() };
   }
   function exportCsv() {
-    const payload = buildSheetPayload(), rows = [["CHUYẾN ĐI", payload.trip.name], ["Điểm đến", payload.trip.destination], ["Thời gian", formatDateRange(activeTrip())], [], ["CHI PHÍ"], ["Nội dung", "Ngày & giờ", "Nhóm", "Tổng tiền", "Tổng tiền/người", "Người trả", "Người tham gia", "Cách chia", "Ghi chú"]];
-    payload.trip.expenses.forEach((e) => rows.push([e.description, e.date, e.category, e.amount, e.averagePerPerson, e.payerName, e.participantNames.join(", "), e.splitMode === "custom" ? "Tùy chỉnh" : "Chia đều", e.note]));
+    const payload = buildSheetPayload(), rows = [["CHUYẾN ĐI", payload.trip.name], ["Điểm đến", payload.trip.destination], ["Thời gian", formatDateRange(activeTrip())], [], ["CHI PHÍ"], ["Quyết toán", "Nội dung", "Ngày & giờ", "Nhóm", "Tổng tiền", "Tổng tiền/người", "Người trả", "Người tham gia", "Cách chia", "Ghi chú"]];
+    payload.trip.expenses.forEach((e) => rows.push([e.included ? "Đang tính" : "Kế hoạch - chưa tính", e.description, e.date, e.category, e.amount, e.averagePerPerson, e.payerName, e.participantNames.join(", "), e.splitMode === "custom" ? "Tùy chỉnh" : "Chia đều", e.note]));
     rows.push([], ["ĐỐI SOÁT"], ["Thành viên", "Email", "Phải chịu", "Tạm ứng đã thu", "Đã ứng chi phí", "Đã chuyển", "Đã nhận", "Còn lại"]); payload.summary.forEach((r) => rows.push([r.name, r.email, r.owed, r.prepaid, r.paid, r.transferred, r.received, r.balance]));
     rows.push([], ["CÔNG NỢ CHƯA THANH TOÁN"], ["Người cần trả", "Người cần nhận", "Số tiền", "Trạng thái"]); payload.settlements.forEach((r) => rows.push([r.fromName, r.toName, r.amount, "Chưa thanh toán"]));
     rows.push([], ["LỊCH SỬ ĐÃ THANH TOÁN"], ["Người trả", "Người nhận", "Số tiền", "Thời gian"]); payload.payments.forEach((r) => rows.push([r.fromName, r.toName, r.amount, r.paidAt]));
@@ -590,12 +653,8 @@
 
   function buildPdfReport() {
     const trip = activeTrip();
-    const summary = Logic.calculateOutstandingSummary(trip.members, trip.expenses, trip.payments);
-    const settlements = Logic.calculateSettlements(trip.members, trip.expenses, trip.payments);
-    const totalExpense = trip.expenses.reduce((sum, item) => sum + Logic.toSafeInteger(item.amount), 0);
-    const totalPrepaid = trip.members.reduce((sum, member) => sum + Logic.toSafeInteger(member.prepaidAmount), 0);
-    const totalOutstanding = Object.values(summary).filter((row) => row.balance < 0).reduce((sum, row) => sum + Math.abs(row.balance), 0);
-    const collectedDifference = totalPrepaid - totalExpense;
+    const model = Report.buildModel(trip, Logic);
+    const { summary, settlements, totalExpense, totalPrepaid, totalOutstanding, collectedDifference, plannedTotal } = model;
     const generatedAt = new Intl.DateTimeFormat("vi-VN", { dateStyle: "full", timeStyle: "short" }).format(new Date());
     const summaryRows = trip.members.map((member) => {
       const row = summary[member.id];
@@ -603,16 +662,18 @@
       return `<tr><td><strong>${escapeHtml(member.name)}</strong>${member.email ? `<br><small>${escapeHtml(member.email)}</small>` : ""}</td><td class="num">${formatCurrency(row.prepaid)}</td><td class="num">${formatCurrency(row.owed)}</td><td class="num">${formatCurrency(row.paid)}</td><td class="num">${formatCurrency(row.transferred)}</td><td class="num">${formatCurrency(row.received)}</td><td class="num ${status.className}">${row.balance > 0 ? "+" : ""}${formatCurrency(row.balance)}</td><td class="${status.className}">${status.label}</td></tr>`;
     }).join("");
     const settlementRows = settlements.map((item, index) => `<tr><td>${index + 1}</td><td><strong>${escapeHtml(item.fromName)}</strong></td><td>chuyển cho</td><td><strong>${escapeHtml(item.toName)}</strong></td><td class="num status-pay">${formatCurrency(item.amount)}</td><td>Chưa thanh toán</td></tr>`).join("");
-    const expenseRows = [...trip.expenses].sort((a, b) => String(a.date).localeCompare(String(b.date))).map((item, index) => `<tr><td>${index + 1}</td><td>${escapeHtml(formatExpenseDateTime(item.date))}</td><td><strong>${escapeHtml(item.description)}</strong>${item.note ? `<br><small>${escapeHtml(item.note)}</small>` : ""}</td><td>${escapeHtml(item.category || "Khác")}</td><td>${escapeHtml(memberName(item.payerId))}</td><td>${escapeHtml(item.participantIds.map(memberName).join(", "))}</td><td class="num"><strong>${formatCurrency(item.amount)}</strong><br><small>${formatCurrency(averagePerParticipant(item))}/người</small></td></tr>`).join("");
+    const expenseRows = [...model.includedExpenses].sort((a, b) => String(a.date).localeCompare(String(b.date))).map((item, index) => `<tr><td>${index + 1}</td><td>${escapeHtml(formatExpenseDateTime(item.date))}</td><td><strong>${escapeHtml(item.description)}</strong>${item.note ? `<br><small>${escapeHtml(item.note)}</small>` : ""}</td><td>${escapeHtml(item.category || "Khác")}</td><td>${escapeHtml(memberName(item.payerId))}</td><td>${escapeHtml(item.participantIds.map(memberName).join(", "))}</td><td class="num"><strong>${formatCurrency(item.amount)}</strong><br><small>${formatCurrency(averagePerParticipant(item))}/người</small></td></tr>`).join("");
+    const plannedRows = [...model.plannedExpenses].sort((a, b) => String(a.date).localeCompare(String(b.date))).map((item, index) => `<tr><td>${index + 1}</td><td>${escapeHtml(formatExpenseDateTime(item.date))}</td><td><strong>${escapeHtml(item.description)}</strong>${item.note ? `<br><small>${escapeHtml(item.note)}</small>` : ""}</td><td>${escapeHtml(item.category || "Khác")}</td><td>${escapeHtml(memberName(item.payerId))}</td><td class="num">${formatCurrency(item.amount)}</td><td>Chưa tính</td></tr>`).join("");
     const paymentRows = [...trip.payments].sort((a, b) => String(b.paidAt).localeCompare(String(a.paidAt))).map((item, index) => `<tr><td>${index + 1}</td><td>${escapeHtml(formatExpenseDateTime(item.paidAt))}</td><td>${escapeHtml(memberName(item.fromId))}</td><td>${escapeHtml(memberName(item.toId))}</td><td class="num status-done">${formatCurrency(item.amount)}</td><td>Đã thanh toán</td></tr>`).join("");
 
-    return `<header class="pdf-report__header"><div><div class="pdf-report__brand">✈ TripSplit · Báo cáo thu chi</div><h1>${escapeHtml(trip.name)}</h1><div class="pdf-report__meta">${escapeHtml(trip.destination || "Chưa cập nhật điểm đến")} · ${escapeHtml(formatDateRange(trip))} · ${escapeHtml(statusLabel(trip.status))}<br>${trip.members.length} thành viên · ${trip.expenses.length} khoản chi</div></div><div class="pdf-report__generated">Ngày lập báo cáo<br><strong>${escapeHtml(generatedAt)}</strong></div></header>
-      <section class="pdf-report__stats"><div class="pdf-report__stat pdf-report__stat--income"><span>Đã thu tạm ứng</span><strong>${formatCurrency(totalPrepaid)}</strong></div><div class="pdf-report__stat pdf-report__stat--expense"><span>Tổng chi phí</span><strong>${formatCurrency(totalExpense)}</strong></div><div class="pdf-report__stat"><span>Thu trước - chi phí</span><strong>${collectedDifference > 0 ? "+" : ""}${formatCurrency(collectedDifference)}</strong></div><div class="pdf-report__stat pdf-report__stat--debt"><span>Công nợ còn lại</span><strong>${formatCurrency(totalOutstanding)}</strong></div></section>
+    return `<header class="pdf-report__header"><div><div class="pdf-report__brand">✈ TripSplit · Báo cáo thu chi</div><h1>${escapeHtml(trip.name)}</h1><div class="pdf-report__meta">${escapeHtml(trip.destination || "Chưa cập nhật điểm đến")} · ${escapeHtml(formatDateRange(trip))} · ${escapeHtml(statusLabel(trip.status))}<br>${trip.members.length} thành viên · ${model.includedExpenses.length} khoản đã chốt · ${model.plannedExpenses.length} khoản kế hoạch</div></div><div class="pdf-report__generated">Ngày lập báo cáo<br><strong>${escapeHtml(generatedAt)}</strong></div></header>
+      <section class="pdf-report__stats"><div class="pdf-report__stat pdf-report__stat--income"><span>Đã thu tạm ứng</span><strong>${formatCurrency(totalPrepaid)}</strong></div><div class="pdf-report__stat pdf-report__stat--expense"><span>Chi phí đã chốt</span><strong>${formatCurrency(totalExpense)}</strong></div><div class="pdf-report__stat"><span>Chi phí kế hoạch</span><strong>${formatCurrency(plannedTotal)}</strong></div><div class="pdf-report__stat"><span>Thu trước - chi phí</span><strong>${collectedDifference > 0 ? "+" : ""}${formatCurrency(collectedDifference)}</strong></div><div class="pdf-report__stat pdf-report__stat--debt"><span>Công nợ còn lại</span><strong>${formatCurrency(totalOutstanding)}</strong></div></section>
       <section class="pdf-report__section"><h2>1. Đối soát theo thành viên</h2><p class="pdf-report__section-note">Tạm ứng là khoản thu trước cố định; số dư chi phí được tính từ người thực trả và phần phải chịu.</p>${summaryRows ? `<table><thead><tr><th>Thành viên</th><th class="num">Tạm ứng</th><th class="num">Phải chịu</th><th class="num">Ứng chi phí</th><th class="num">Đã chuyển</th><th class="num">Đã nhận</th><th class="num">Còn lại</th><th>Trạng thái</th></tr></thead><tbody>${summaryRows}</tbody></table>` : '<div class="pdf-report__empty">Chưa có thành viên.</div>'}</section>
       <section class="pdf-report__section"><h2>2. Ai còn nợ ai?</h2>${settlementRows ? `<table><thead><tr><th>STT</th><th>Người cần trả</th><th></th><th>Người cần nhận</th><th class="num">Số tiền</th><th>Trạng thái</th></tr></thead><tbody>${settlementRows}</tbody></table>` : '<div class="pdf-report__empty">✓ Chuyến đi hiện không còn giao dịch cần thanh toán.</div>'}</section>
-      <section class="pdf-report__section"><h2>3. Chi tiết các khoản chi</h2>${expenseRows ? `<table><thead><tr><th>STT</th><th>Ngày & giờ</th><th>Nội dung</th><th>Nhóm</th><th>Người trả</th><th>Người tham gia</th><th class="num">Số tiền</th></tr></thead><tbody>${expenseRows}</tbody></table>` : '<div class="pdf-report__empty">Chưa có khoản chi.</div>'}</section>
-      <section class="pdf-report__section"><h2>4. Lịch sử đã thanh toán</h2>${paymentRows ? `<table><thead><tr><th>STT</th><th>Thời gian</th><th>Người trả</th><th>Người nhận</th><th class="num">Số tiền</th><th>Trạng thái</th></tr></thead><tbody>${paymentRows}</tbody></table>` : '<div class="pdf-report__empty">Chưa có giao dịch được đánh dấu đã thanh toán.</div>'}</section>
-      <section class="pdf-report__section"><h2>5. Lưu ý cách đọc báo cáo</h2><div class="pdf-report__notes"><ul><li>“Đã thu tạm ứng” là khoản cố định khai báo trong hồ sơ thành viên và không tự thay đổi trong chuyến đi.</li><li>“Đã ứng chi phí” là số tiền thành viên trực tiếp thanh toán cho các hóa đơn.</li><li>Chỉ số “Thu trước - chi phí” dùng để tham khảo quy mô quỹ; công nợ thực tế căn cứ người trả, người tham gia và lịch sử thanh toán.</li><li>Số dư âm nghĩa là còn phải trả; số dư dương nghĩa là còn được nhận.</li></ul></div></section>
+      <section class="pdf-report__section"><h2>3. Chi tiết chi phí đã chốt</h2>${expenseRows ? `<table><thead><tr><th>STT</th><th>Ngày & giờ</th><th>Nội dung</th><th>Nhóm</th><th>Người trả</th><th>Người tham gia</th><th class="num">Số tiền</th></tr></thead><tbody>${expenseRows}</tbody></table>` : '<div class="pdf-report__empty">Chưa có khoản chi được bật quyết toán.</div>'}</section>
+      <section class="pdf-report__section"><h2>4. Chi phí kế hoạch chưa tính</h2>${plannedRows ? `<table><thead><tr><th>STT</th><th>Ngày & giờ</th><th>Nội dung</th><th>Nhóm</th><th>Người dự kiến trả</th><th class="num">Số tiền</th><th>Trạng thái</th></tr></thead><tbody>${plannedRows}</tbody></table>` : '<div class="pdf-report__empty">Không có khoản kế hoạch đang tắt.</div>'}</section>
+      <section class="pdf-report__section"><h2>5. Lịch sử đã thanh toán</h2>${paymentRows ? `<table><thead><tr><th>STT</th><th>Thời gian</th><th>Người trả</th><th>Người nhận</th><th class="num">Số tiền</th><th>Trạng thái</th></tr></thead><tbody>${paymentRows}</tbody></table>` : '<div class="pdf-report__empty">Chưa có giao dịch được đánh dấu đã thanh toán.</div>'}</section>
+      <section class="pdf-report__section"><h2>6. Lưu ý cách đọc báo cáo</h2><div class="pdf-report__notes"><ul><li>“Đã thu tạm ứng” là khoản cố định khai báo trong hồ sơ thành viên và không tự thay đổi trong chuyến đi.</li><li>“Chi phí kế hoạch” được liệt kê để tham khảo nhưng không tham gia tổng chi, chia tiền hay công nợ.</li><li>“Đã ứng chi phí” là số tiền thành viên trực tiếp thanh toán cho các hóa đơn đang bật quyết toán.</li><li>Chỉ số “Thu trước - chi phí” dùng để tham khảo quy mô quỹ; công nợ thực tế căn cứ người trả, người tham gia và lịch sử thanh toán.</li><li>Số dư âm nghĩa là còn phải trả; số dư dương nghĩa là còn được nhận.</li></ul></div></section>
       <footer class="pdf-report__footer">Báo cáo được tạo tự động bởi TripSplit · Vui lòng đối chiếu chứng từ trước khi quyết toán.</footer>`;
   }
 
@@ -629,7 +690,7 @@
     const printWindow = window.open("", "_blank");
     if (!printWindow) { showToast("Trình duyệt đang chặn cửa sổ lưu PDF. Hãy cho phép popup rồi thử lại."); return; }
     printWindow.opener = null;
-    const stylesheetUrl = new URL("styles.css?v=15", window.location.href).toString();
+    const stylesheetUrl = new URL("styles.css?v=16", window.location.href).toString();
     const title = `Bao-cao-thu-chi-${safeFilename(activeTrip().name)}`;
     printWindow.document.open();
     printWindow.document.write(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title><link rel="stylesheet" href="${escapeHtml(stylesheetUrl)}"><style>@page{size:A4;margin:12mm}html,body{margin:0!important;background:#fff!important}.pdf-report{width:auto!important;min-height:0!important;margin:0!important;padding:0!important;box-shadow:none!important}.pdf-report__section{break-inside:auto}.pdf-report tr,.pdf-report__stat,.pdf-report__notes{break-inside:avoid}.pdf-report__footer{margin-top:18px}</style></head><body><article class="pdf-report">${dom.pdfReport.innerHTML}</article></body></html>`);
@@ -743,6 +804,11 @@
   }
 
   dom.tripSelect.addEventListener("change", () => { closeShareMenu(); portfolio.activeTripId = dom.tripSelect.value; editingExpenseId = null; resetMemberForm(); localStorage.setItem(STORAGE_KEY, JSON.stringify(portfolio)); resetExpenseForm(); render(); setSharedUrl(activeTrip().shareId || ""); });
+  dom.btnHome.addEventListener("click", showHome);
+  dom.btnOpenCurrentTrip.addEventListener("click", showWorkspace);
+  dom.btnHomeNewTrip.addEventListener("click", () => openTripDialog());
+  dom.homePeriod.addEventListener("change", renderHome);
+  dom.homeTripList.addEventListener("click", (event) => { const button = event.target.closest("[data-open-home-trip]"); if (!button) return; const trip = portfolio.trips.find((item) => item.id === button.dataset.openHomeTrip); if (!trip) return; portfolio.activeTripId = trip.id; localStorage.setItem(STORAGE_KEY, JSON.stringify(portfolio)); render(); showWorkspace(); setSharedUrl(trip.shareId || ""); });
   dom.btnNewTrip.addEventListener("click", () => openTripDialog()); dom.btnEditTrip.addEventListener("click", () => openTripDialog(activeTrip()));
   dom.btnShareTrip.addEventListener("click", openShareMenu);
   dom.shareMenu.addEventListener("click", (event) => {
@@ -758,8 +824,9 @@
   dom.btnDeleteTrip.addEventListener("click", () => { if (portfolio.trips.length === 1) { showToast("Cần giữ lại ít nhất một chuyến đi."); return; } const trip = activeTrip(); if (!confirm(`Xóa toàn bộ dữ liệu của “${trip.name}” khỏi thiết bị này?`)) return; portfolio.trips = portfolio.trips.filter((t) => t.id !== trip.id); portfolio.activeTripId = portfolio.trips[0].id; resetMemberForm(); localStorage.setItem(STORAGE_KEY, JSON.stringify(portfolio)); resetExpenseForm(); render(); setSharedUrl(activeTrip().shareId || ""); showToast("Đã xóa chuyến đi khỏi thiết bị này."); });
   dom.tripForm.addEventListener("submit", (event) => { event.preventDefault(); saveTripFromDialog(); }); [dom.btnCloseTripDialog, dom.btnCancelTrip].forEach((button) => button.addEventListener("click", () => dom.tripDialog.close()));
   dom.memberForm.addEventListener("submit", (event) => { event.preventDefault(); saveMember(); }); dom.memberPrepaidAmount.addEventListener("input", () => { const value = parseMoney(dom.memberPrepaidAmount.value); dom.memberPrepaidAmount.value = value ? formatNumber(value) : ""; }); dom.btnCancelMemberEdit.addEventListener("click", () => { resetMemberForm(); renderMembers(); }); dom.memberList.addEventListener("click", (event) => { const editButton = event.target.closest("[data-edit-member]"), removeButton = event.target.closest("[data-remove-member]"); if (editButton) beginEditMember(editButton.dataset.editMember); if (removeButton) removeMember(removeButton.dataset.removeMember); });
-  dom.expenseForm.addEventListener("submit", (event) => { event.preventDefault(); const result = validateExpense(); if (result.message) { dom.expenseError.textContent = result.message; return; } const trip = activeTrip(); if (editingExpenseId) { const index = trip.expenses.findIndex((e) => e.id === editingExpenseId), existing = trip.expenses[index]; result.data.date = stampExpenseDate(result.data.date, existing.date); trip.expenses[index] = { ...existing, ...result.data, updatedAt: now() }; showToast("Đã cập nhật khoản chi."); } else { result.data.date = stampExpenseDate(result.data.date); trip.expenses.unshift({ id: uid("expense"), ...result.data, createdAt: now() }); showToast("Đã thêm khoản chi."); } savePortfolio(); resetExpenseForm(); render(); });
+  dom.expenseForm.addEventListener("submit", (event) => { event.preventDefault(); const result = validateExpense(); if (result.message) { dom.expenseError.textContent = result.message; return; } const trip = activeTrip(); if (editingExpenseId) { const index = trip.expenses.findIndex((e) => e.id === editingExpenseId), existing = trip.expenses[index]; result.data.date = stampExpenseDate(result.data.date, existing.date); trip.expenses[index] = { ...existing, ...result.data, included: existing.included !== false, updatedAt: now() }; showToast("Đã cập nhật khoản chi."); } else { result.data.date = stampExpenseDate(result.data.date); trip.expenses.unshift({ id: uid("expense"), ...result.data, included: true, createdAt: now() }); showToast("Đã thêm khoản chi."); } savePortfolio(); resetExpenseForm(); render(); });
   dom.expenseTableBody.addEventListener("click", (event) => { const edit = event.target.closest("[data-edit-expense]"), remove = event.target.closest("[data-delete-expense]"); if (edit) beginEditExpense(edit.dataset.editExpense); if (remove) { const trip = activeTrip(), e = trip.expenses.find((item) => item.id === remove.dataset.deleteExpense); if (e && confirm(`Xóa khoản “${e.description}”?`)) { trip.expenses = trip.expenses.filter((item) => item.id !== e.id); if (editingExpenseId === e.id) resetExpenseForm(); savePortfolio(); render(); } } });
+  dom.expenseTableBody.addEventListener("change", (event) => { const toggle = event.target.closest("[data-toggle-expense]"); if (toggle) setExpenseIncluded(toggle.dataset.toggleExpense, toggle.checked); });
   dom.settlementList.addEventListener("click", (event) => { const button = event.target.closest("[data-mark-paid]"); if (button) markSettlementPaid(button.dataset.markPaid, button.dataset.paidTo, button.dataset.paidAmount); });
   dom.paymentHistoryList.addEventListener("click", (event) => { const button = event.target.closest("[data-undo-payment]"); if (button) undoPayment(button.dataset.undoPayment); });
   dom.expenseSearch.addEventListener("input", renderExpenses); dom.expenseAmount.addEventListener("input", () => { const value = parseMoney(dom.expenseAmount.value); dom.expenseAmount.value = value ? formatNumber(value) : ""; updateSplitEditor(); }); dom.participantList.addEventListener("change", updateSplitEditor); $$('input[name="splitMode"]').forEach((r) => r.addEventListener("change", updateSplitEditor)); dom.customShares.addEventListener("input", (event) => { const input = event.target.closest("[data-share-member]"); if (input) { if (!input.value.includes("%")) { const value = parseMoney(input.value); input.value = input.value.trim() ? formatNumber(value) : ""; } updateCustomSuggestions(); } });
