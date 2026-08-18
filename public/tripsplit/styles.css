@@ -357,6 +357,9 @@ input::placeholder { color: #aba8a3; }
 
 .form-grid { display: grid; gap: 14px; margin-bottom: 4px; }
 .form-grid--3 { grid-template-columns: 1.5fr 1fr 1fr; }
+.form-grid--4 { grid-template-columns: 1.4fr 1fr 1fr 1fr; }
+.field--readonly { opacity: .72; }
+.field--readonly select { background: var(--surface-3); cursor: not-allowed; }
 
 .money-input { position: relative; }
 .money-input input { padding-right: 34px; text-align: right; font-weight: 700; }
@@ -438,7 +441,11 @@ input::placeholder { color: #aba8a3; }
 .member-advance-field label { margin-bottom: 7px; }
 .member-prepaid { color: var(--text) !important; white-space: normal !important; }
 .member-prepaid strong { display: inline; color: var(--primary-strong); }
+.keeper-badge { display: inline-block; margin-left: 6px; padding: 2px 7px; border-radius: 999px; background: var(--primary-soft); color: var(--primary-strong); font-size: 10px; vertical-align: middle; }
 .prepaid-amount { color: var(--primary-strong); font-weight: 700; }
+.prepaid-remaining { color: var(--success); font-weight: 700; white-space: nowrap; }
+.advance-shortfall, .fund-held-note { display: block; margin-top: 3px; color: var(--danger-strong); font-size: 10px; font-weight: 650; white-space: nowrap; }
+.fund-held-note { color: var(--primary-strong); }
 .member-form__actions { display: flex; gap: 10px; }
 .member-form__actions .btn { flex: 1; }
 .member-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
@@ -459,6 +466,27 @@ input::placeholder { color: #aba8a3; }
 .tips__grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 .tips__grid p { color: var(--muted); font-size: 13px; line-height: 1.5; }
 .tips__grid strong { color: var(--text); }
+
+/* ===================== Trip fund ===================== */
+.fund-keeper-field { display: grid; gap: 6px; min-width: 190px; color: var(--muted); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.fund-keeper-field select { min-height: 40px; color: var(--text); text-transform: none; letter-spacing: 0; }
+.fund-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 16px 0; }
+.fund-kpis article { padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); }
+.fund-kpis span { display: block; color: var(--muted); font-size: 11px; font-weight: 650; }
+.fund-kpis strong { display: block; margin-top: 6px; font-size: 20px; }
+.fund-kpis article:last-child { border-color: #bfe3cf; background: var(--success-soft); }
+.fund-kpis article:last-child strong { color: var(--success); }
+.fund-kpis .fund-kpi--negative { border-color: #fecaca; background: var(--danger-soft); }
+.fund-kpis .fund-kpi--negative strong { color: var(--danger-strong); }
+.fund-form { display: grid; grid-template-columns: 1fr 1fr 1fr 1.4fr auto; gap: 10px; align-items: end; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); }
+.fund-form .btn { min-height: 42px; }
+.fund-ledger { display: grid; gap: 8px; margin-top: 14px; }
+.fund-ledger__item { display: grid; grid-template-columns: auto minmax(140px, 1fr) auto auto; gap: 12px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; }
+.fund-ledger__item small { display: block; margin-top: 2px; color: var(--muted); font-size: 11px; }
+.fund-ledger__type { padding: 4px 8px; border-radius: 999px; background: var(--success-soft); color: var(--success); font-size: 10px; font-weight: 750; text-transform: uppercase; }
+.fund-ledger__type--refund { background: var(--danger-soft); color: var(--danger-strong); }
+.expense-source { margin-top: 4px; color: var(--muted); font-size: 10px; font-weight: 650; }
+.expense-source--fund { color: var(--primary-strong); }
 
 /* ===================== Setup guide ===================== */
 .setup-guide {
@@ -638,8 +666,14 @@ dialog::backdrop { background: rgba(20, 20, 19, .5); backdrop-filter: blur(3px);
 @media (max-width: 860px) {
   .form-grid--3 { grid-template-columns: 1fr 1fr; }
   .form-grid--3 .field:first-child { grid-column: 1 / -1; }
+  .form-grid--4 { grid-template-columns: 1fr 1fr; }
+  .fund-form { grid-template-columns: 1fr 1fr; }
+  .fund-form .btn { width: 100%; }
+  .fund-kpis { grid-template-columns: 1fr 1fr; }
   .tips__grid { grid-template-columns: 1fr; gap: 8px; }
   .stats-grid { grid-template-columns: 1fr 1fr; }
+  .fund-keeper-field { width: 100%; }
+  .fund-ledger__item { grid-template-columns: auto minmax(0, 1fr) auto auto; }
   .home-kpis { grid-template-columns: 1fr 1fr; }
   .home-insights { grid-template-columns: 1fr; }
 }
@@ -729,6 +763,9 @@ dialog::backdrop { background: rgba(20, 20, 19, .5); backdrop-filter: blur(3px);
   .card { padding: 16px; }
   #btnNewTrip { padding-inline: 13px; }
   .form-grid--3 { grid-template-columns: 1fr; }
+  .form-grid--4, .fund-form, .fund-kpis { grid-template-columns: 1fr; }
+  .fund-ledger__item { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .fund-ledger__item .icon-button { grid-column: 1 / -1; width: 100%; }
   .participant-grid { grid-template-columns: 1fr; }
   .home-kpis { grid-template-columns: 1fr; }
 }

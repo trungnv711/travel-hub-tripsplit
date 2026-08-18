@@ -14,7 +14,7 @@
   const dom = Object.fromEntries([
     "tripSelect", "tripStatus", "tripTitle", "tripMeta", "saveStatus", "memberForm", "memberName",
     "memberEmail", "memberPrepaidAmount", "memberError", "memberList", "btnSaveMember", "btnCancelMemberEdit", "appsScriptUrl", "appsScriptSecret", "btnGenerateSecret", "btnCheckAppsScript", "btnShareSheet", "btnOpenSheet", "sheetStatus", "sheetStatusTitle", "sheetStatusText", "sheetError",
-    "expenseForm", "expenseFormTitle", "expenseDescription", "expenseAmount", "expensePayer",
+    "expenseForm", "expenseFormTitle", "expenseDescription", "expenseAmount", "expensePayer", "expensePaymentSource",
     "expenseDate", "expenseCategory", "expenseNote", "participantList", "customShares",
     "equalSplitPreview", "expenseError", "btnCancelEdit", "btnSaveExpense", "expenseTableBody",
     "expenseEmpty", "expenseSearch", "summaryTableBody", "settlementList", "paymentHistoryList", "statTotal",
@@ -24,7 +24,8 @@
     "tripDestination", "tripStartDate", "tripEndDate", "tripStatusInput", "tripError",
     "btnCloseTripDialog", "btnCancelTrip", "accountBox", "accountName", "accountEmail",
     "btnSignIn", "btnSignOut", "shareControl", "shareMenu", "shareMenuHint", "shareNative",
-    "shareEmail", "shareEmailHint", "btnHome", "homeView", "workspaceView", "btnOpenCurrentTrip", "btnHomeNewTrip", "homePeriod", "homePeriodHint", "homeTripCount", "homeTotalExpense", "homeAveragePerson", "homeExpenseCount", "homeCategoryChart", "homeContributorList", "homeTripList"
+    "shareEmail", "shareEmailHint", "btnHome", "homeView", "workspaceView", "btnOpenCurrentTrip", "btnHomeNewTrip", "homePeriod", "homePeriodHint", "homeTripCount", "homeTotalExpense", "homeAveragePerson", "homeExpenseCount", "homeCategoryChart", "homeContributorList", "homeTripList",
+    "fundKeeper", "fundTotalDeposited", "fundTotalSpent", "fundTotalRefunded", "fundBalance", "fundBalanceLabel", "fundBalanceCard", "fundTransactionForm", "fundTransactionMember", "fundTransactionType", "fundTransactionAmount", "fundTransactionNote", "fundTransactionList", "fundError"
   ].map((id) => [id, document.getElementById(id)]));
 
   let portfolio = loadPortfolio();
@@ -76,34 +77,36 @@
     return `${format(trip.startDate)} – ${format(trip.endDate)}`;
   }
 
-  function makeTrip({ id = uid("trip"), name, destination = "", startDate = "", endDate = "", status = "planning", members = [], expenses = [], payments = [] }) {
-    return { id, name, destination, startDate, endDate, status, members, expenses, payments, createdAt: now(), updatedAt: now() };
+  function makeTrip({ id = uid("trip"), name, destination = "", startDate = "", endDate = "", status = "planning", members = [], expenses = [], payments = [], fundKeeperId = "", fundTransactions = [] }) {
+    return { id, name, destination, startDate, endDate, status, members, expenses, payments, fundKeeperId: fundKeeperId || members[0]?.id || "", fundTransactions, createdAt: now(), updatedAt: now() };
   }
 
   function createSamplePortfolio() {
     const people = (prefix, names) => names.map((name, index) => ({ id: `${prefix}_m${index + 1}`, name, email: "", prepaidAmount: 0 }));
     const dalatMembers = people("dl", ["An", "Bình", "Chi", "Dũng", "Giang", "Hà", "Khang", "Lan", "Minh", "Ngọc"]);
     const baolocMembers = people("bl", ["An", "Bình", "Chi", "Dũng", "Hà", "Lan", "Minh", "Phúc"]);
-    const expense = (id, description, amount, payerId, participantIds, category, date) => ({ id, description, amount, payerId, participantIds, splitMode: "equal", customShares: {}, category, date, note: "", included: true, createdAt: now() });
+    const expense = (id, description, amount, payerId, participantIds, category, date) => ({ id, description, amount, payerId, participantIds, splitMode: "equal", customShares: {}, category, date, note: "", included: true, paymentSource: "personal", createdAt: now() });
     const dalat = makeTrip({ id: "trip_da_lat", name: "Trip 1 — Đà Lạt", destination: "Đà Lạt", startDate: "2026-08-15", endDate: "2026-08-17", status: "planning", members: dalatMembers });
     dalat.expenses = [expense("dl_e1", "Đặt cọc villa", 6000000, dalatMembers[0].id, dalatMembers.map((m) => m.id), "Lưu trú", "2026-08-01")];
     const baoloc = makeTrip({ id: "trip_bao_loc", name: "Trip 2 — Bảo Lộc", destination: "Bảo Lộc", startDate: "2026-09-05", endDate: "2026-09-06", status: "planning", members: baolocMembers });
     baoloc.expenses = [expense("bl_e1", "Đặt xe khứ hồi", 3200000, baolocMembers[1].id, baolocMembers.map((m) => m.id), "Di chuyển", "2026-08-03")];
-    return { version: 3, activeTripId: dalat.id, trips: [dalat, baoloc] };
+    return { version: 4, activeTripId: dalat.id, trips: [dalat, baoloc] };
   }
 
   function migrateLegacy(legacy) {
     const trip = makeTrip({ name: String(legacy.tripName || "Chuyến đi đã nhập"), members: legacy.members.map((m) => ({ ...m, email: m.email || "", prepaidAmount: Logic.toSafeInteger(m.prepaidAmount) })), expenses: legacy.expenses.map((expense) => ({ ...expense, included: expense.included !== false })) });
-    return { version: 3, activeTripId: trip.id, trips: [trip] };
+    return normalizePortfolio({ version: 4, activeTripId: trip.id, trips: [trip] });
   }
 
   function normalizePortfolio(candidate) {
-    candidate.version = 3;
+    candidate.version = 4;
     candidate.trips.forEach((trip) => {
       trip.destination ||= ""; trip.startDate ||= ""; trip.endDate ||= ""; trip.status ||= "planning";
       trip.payments ||= [];
+      trip.fundTransactions = Array.isArray(trip.fundTransactions) ? trip.fundTransactions : [];
       trip.members.forEach((member) => { member.email ||= ""; member.prepaidAmount = Logic.toSafeInteger(member.prepaidAmount); });
-      trip.expenses.forEach((expense) => { expense.included = expense.included !== false; });
+      trip.expenses.forEach((expense) => { expense.included = expense.included !== false; expense.paymentSource = expense.paymentSource === "fund" ? "fund" : "personal"; });
+      if (!trip.members.some((member) => member.id === trip.fundKeeperId)) trip.fundKeeperId = trip.members[0]?.id || "";
     });
     return candidate;
   }
@@ -181,8 +184,10 @@
         : [];
       accountTrips.forEach((trip) => {
         trip.payments ||= [];
+        trip.fundTransactions = Array.isArray(trip.fundTransactions) ? trip.fundTransactions : [];
         trip.members.forEach((member) => { member.email ||= ""; member.prepaidAmount = Logic.toSafeInteger(member.prepaidAmount); });
-        trip.expenses.forEach((expense) => { expense.included = expense.included !== false; });
+        trip.expenses.forEach((expense) => { expense.included = expense.included !== false; expense.paymentSource = expense.paymentSource === "fund" ? "fund" : "personal"; });
+        if (!trip.members.some((member) => member.id === trip.fundKeeperId)) trip.fundKeeperId = trip.members[0]?.id || "";
         const index = portfolio.trips.findIndex((item) => item.shareId === trip.shareId || item.id === trip.id);
         if (index >= 0) portfolio.trips[index] = trip;
         else portfolio.trips.push(trip);
@@ -353,8 +358,10 @@
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || "Không thể tải chuyến đi.");
       if (!Logic.validateTrip(result.trip).valid) throw new Error("Dữ liệu chuyến đi trên máy chủ không hợp lệ.");
-      const sharedTrip = { ...result.trip, payments: Array.isArray(result.trip.payments) ? result.trip.payments : [], shareId, shareRevision: result.revision };
+      const sharedTrip = { ...result.trip, payments: Array.isArray(result.trip.payments) ? result.trip.payments : [], fundTransactions: Array.isArray(result.trip.fundTransactions) ? result.trip.fundTransactions : [], shareId, shareRevision: result.revision };
       sharedTrip.members.forEach((member) => { member.email ||= ""; member.prepaidAmount = Logic.toSafeInteger(member.prepaidAmount); });
+      sharedTrip.expenses.forEach((expense) => { expense.included = expense.included !== false; expense.paymentSource = expense.paymentSource === "fund" ? "fund" : "personal"; });
+      if (!sharedTrip.members.some((member) => member.id === sharedTrip.fundKeeperId)) sharedTrip.fundKeeperId = sharedTrip.members[0]?.id || "";
       sharedTrip.expenses.forEach((expense) => { expense.included = expense.included !== false; });
       isApplyingSharedTrip = true;
       const index = portfolio.trips.findIndex((trip) => trip.shareId === shareId || trip.id === sharedTrip.id);
@@ -423,15 +430,16 @@
     dom.tripTitle.textContent = trip.name;
     dom.tripMeta.textContent = [trip.destination || "Chưa có điểm đến", formatDateRange(trip), `${trip.members.length} thành viên`].join(" · ");
     dom.btnShareTrip.textContent = "↗ Chia sẻ";
-    renderMembers(); renderPayerOptions(); renderParticipants(); renderExpenses(); renderSummary(); renderStats(); updateSplitEditor(); renderAccount(); renderSheetLink();
+    renderMembers(); renderPayerOptions(); renderParticipants(); renderExpenses(); renderFund(); renderSummary(); renderStats(); updateSplitEditor(); renderAccount(); renderSheetLink();
     if (currentView === "home") showHome(); else showWorkspace();
   }
 
   function renderMembers() {
     const trip = activeTrip();
     dom.memberList.innerHTML = trip.members.length ? trip.members.map((member) => {
-      const inUse = trip.expenses.some((expense) => expense.payerId === member.id || expense.participantIds.includes(member.id));
-      return `<div class="member-item ${editingMemberId === member.id ? "member-item--editing" : ""}"><div><strong>${escapeHtml(member.name)}</strong><small class="${member.email ? "" : "missing-email"}">${escapeHtml(member.email || "Chưa có email · vẫn dùng được")}</small><small class="member-prepaid">Tạm ứng đã thu: <strong>${formatCurrency(member.prepaidAmount)}</strong></small></div><div class="member-item__actions"><button class="icon-button" type="button" data-edit-member="${escapeHtml(member.id)}" title="Sửa tên, email hoặc tiền tạm ứng" aria-label="Sửa ${escapeHtml(member.name)}">✎</button><button class="icon-button icon-button--danger" type="button" data-remove-member="${escapeHtml(member.id)}" ${inUse ? "disabled" : ""} title="${inUse ? "Đang có dữ liệu chi phí" : "Xóa thành viên"}" aria-label="Xóa ${escapeHtml(member.name)}">✕</button></div></div>`;
+      const inUse = trip.expenses.some((expense) => expense.payerId === member.id || expense.participantIds.includes(member.id)) || trip.fundTransactions.some((transaction) => transaction.memberId === member.id) || trip.fundKeeperId === member.id;
+      const fund = Logic.calculateFundSummary(trip.members, trip.expenses, trip.fundTransactions, trip.fundKeeperId).memberRows[member.id];
+      return `<div class="member-item ${editingMemberId === member.id ? "member-item--editing" : ""}"><div><strong>${escapeHtml(member.name)}${trip.fundKeeperId === member.id ? ' <span class="keeper-badge">Giữ quỹ</span>' : ""}</strong><small class="${member.email ? "" : "missing-email"}">${escapeHtml(member.email || "Chưa có email · vẫn dùng được")}</small><small class="member-prepaid">Tổng tạm ứng: <strong>${formatCurrency(fund.totalDeposited)}</strong> · Còn lại: <strong>${formatCurrency(fund.remainingAdvance)}</strong></small></div><div class="member-item__actions"><button class="icon-button" type="button" data-edit-member="${escapeHtml(member.id)}" title="Sửa tên, email hoặc tạm ứng ban đầu" aria-label="Sửa ${escapeHtml(member.name)}">✎</button><button class="icon-button icon-button--danger" type="button" data-remove-member="${escapeHtml(member.id)}" ${inUse ? "disabled" : ""} title="${inUse ? "Đang có dữ liệu chi phí hoặc quỹ" : "Xóa thành viên"}" aria-label="Xóa ${escapeHtml(member.name)}">✕</button></div></div>`;
     }).join("") : '<div class="empty-state">Chưa có thành viên.</div>';
   }
 
@@ -440,6 +448,32 @@
     const members = activeTrip().members;
     dom.expensePayer.innerHTML = members.length ? members.map((m) => `<option value="${escapeHtml(m.id)}">${escapeHtml(m.name)}</option>`).join("") : '<option value="">Hãy thêm thành viên</option>';
     if (members.some((m) => m.id === selected)) dom.expensePayer.value = selected;
+    const options = members.length ? members.map((m) => `<option value="${escapeHtml(m.id)}">${escapeHtml(m.name)}</option>`).join("") : '<option value="">Hãy thêm thành viên</option>';
+    dom.fundKeeper.innerHTML = options;
+    dom.fundTransactionMember.innerHTML = options;
+    dom.fundKeeper.value = members.some((member) => member.id === activeTrip().fundKeeperId) ? activeTrip().fundKeeperId : (members[0]?.id || "");
+    updateExpensePaymentSource();
+  }
+
+  function updateExpensePaymentSource() {
+    const fromFund = dom.expensePaymentSource.value === "fund";
+    const keeperId = activeTrip().fundKeeperId;
+    if (fromFund && keeperId) dom.expensePayer.value = keeperId;
+    dom.expensePayer.disabled = fromFund;
+    dom.expensePayer.closest(".field")?.classList.toggle("field--readonly", fromFund);
+  }
+
+  function renderFund() {
+    const trip = activeTrip();
+    const fund = Logic.calculateFundSummary(trip.members, trip.expenses, trip.fundTransactions, trip.fundKeeperId);
+    dom.fundTotalDeposited.textContent = formatCurrency(fund.totalDeposited);
+    dom.fundTotalSpent.textContent = formatCurrency(fund.fundSpent);
+    dom.fundTotalRefunded.textContent = formatCurrency(fund.totalRefunded);
+    dom.fundBalance.textContent = `${fund.fundBalance < 0 ? "−" : ""}${formatCurrency(Math.abs(fund.fundBalance))}`;
+    dom.fundBalanceLabel.textContent = fund.fundBalance < 0 ? "Quỹ đang thiếu" : "Quỹ còn lại";
+    dom.fundBalanceCard.classList.toggle("fund-kpi--negative", fund.fundBalance < 0);
+    const transactions = [...trip.fundTransactions].sort((a, b) => String(b.occurredAt).localeCompare(String(a.occurredAt)));
+    dom.fundTransactionList.innerHTML = transactions.length ? transactions.map((transaction) => `<div class="fund-ledger__item"><span class="fund-ledger__type fund-ledger__type--${transaction.type}">${transaction.type === "refund" ? "Hoàn" : "Nạp"}</span><div><strong>${escapeHtml(memberName(transaction.memberId))}</strong><small>${escapeHtml(formatExpenseDateTime(transaction.occurredAt))}${transaction.note ? ` · ${escapeHtml(transaction.note)}` : ""}</small></div><strong class="${transaction.type === "refund" ? "balance-negative" : "balance-positive"}">${transaction.type === "refund" ? "−" : "+"}${formatCurrency(transaction.amount)}</strong><button class="icon-button icon-button--danger" type="button" data-delete-fund-transaction="${escapeHtml(transaction.id)}" title="Xóa giao dịch quỹ">🗑</button></div>`).join("") : '<div class="empty-state">Chưa có lần nạp thêm hoặc hoàn tiền. Tạm ứng ban đầu vẫn được tính trong tổng quỹ.</div>';
   }
   function selectedParticipantIds() { return $$('input[name="participant"]:checked').map((input) => input.value); }
   function renderParticipants(selectedIds) {
@@ -451,9 +485,9 @@
 
   function renderExpenses() {
     const keyword = dom.expenseSearch.value.trim().toLocaleLowerCase("vi");
-    const expenses = activeTrip().expenses.filter((e) => `${e.description} ${e.category || ""} ${e.note || ""} ${Logic.isExpenseIncluded(e) ? "đang tính" : "kế hoạch"}`.toLocaleLowerCase("vi").includes(keyword));
+    const expenses = activeTrip().expenses.filter((e) => `${e.description} ${e.category || ""} ${e.note || ""} ${Logic.isExpenseIncluded(e) ? "đang tính" : "kế hoạch"} ${Logic.isFundExpense(e) ? "quỹ" : "cá nhân"}`.toLocaleLowerCase("vi").includes(keyword));
     dom.expenseEmpty.classList.toggle("hidden", !!expenses.length);
-    dom.expenseTableBody.innerHTML = expenses.map((e) => { const included = Logic.isExpenseIncluded(e); return `<tr class="${included ? "" : "expense-row--planned"}"><td><label class="expense-toggle"><input type="checkbox" role="switch" data-toggle-expense="${escapeHtml(e.id)}" ${included ? "checked" : ""} aria-label="${included ? "Đang tính" : "Chưa tính"} khoản ${escapeHtml(e.description)}"><span aria-hidden="true"></span><small>${included ? "Đang tính" : "Kế hoạch"}</small></label></td><td><div class="expense-main">${escapeHtml(e.description)}</div><div class="expense-sub">${escapeHtml(e.category || "Khác")}${e.note ? ` · ${escapeHtml(e.note)}` : ""}</div></td><td>${escapeHtml(formatExpenseDateTime(e.date))}</td><td><strong>${escapeHtml(memberName(e.payerId))}</strong></td><td><div class="pill-group">${e.participantIds.map((id) => `<span class="pill">${escapeHtml(memberName(id))}</span>`).join("")}</div></td><td class="align-right amount">${formatCurrency(e.amount)}</td><td class="align-right per-person"><strong>${formatCurrency(averagePerParticipant(e))}</strong><small>${e.participantIds.length} người</small></td><td><div class="row-actions"><button class="icon-button" type="button" data-edit-expense="${escapeHtml(e.id)}" title="Sửa">✎</button><button class="icon-button icon-button--danger" type="button" data-delete-expense="${escapeHtml(e.id)}" title="Xóa">🗑</button></div></td></tr>`; }).join("");
+    dom.expenseTableBody.innerHTML = expenses.map((e) => { const included = Logic.isExpenseIncluded(e); const source = Logic.isFundExpense(e) ? "Quỹ chuyến đi" : "Cá nhân tự trả"; return `<tr class="${included ? "" : "expense-row--planned"}"><td><label class="expense-toggle"><input type="checkbox" role="switch" data-toggle-expense="${escapeHtml(e.id)}" ${included ? "checked" : ""} aria-label="${included ? "Đang tính" : "Chưa tính"} khoản ${escapeHtml(e.description)}"><span aria-hidden="true"></span><small>${included ? "Đang tính" : "Kế hoạch"}</small></label></td><td><div class="expense-main">${escapeHtml(e.description)}</div><div class="expense-sub">${escapeHtml(e.category || "Khác")}${e.note ? ` · ${escapeHtml(e.note)}` : ""}</div></td><td>${escapeHtml(formatExpenseDateTime(e.date))}</td><td><strong>${escapeHtml(memberName(e.payerId))}</strong><div class="expense-source ${Logic.isFundExpense(e) ? "expense-source--fund" : ""}">${escapeHtml(source)}</div></td><td><div class="pill-group">${e.participantIds.map((id) => `<span class="pill">${escapeHtml(memberName(id))}</span>`).join("")}</div></td><td class="align-right amount">${formatCurrency(e.amount)}</td><td class="align-right per-person"><strong>${formatCurrency(averagePerParticipant(e))}</strong><small>${e.participantIds.length} người</small></td><td><div class="row-actions"><button class="icon-button" type="button" data-edit-expense="${escapeHtml(e.id)}" title="Sửa">✎</button><button class="icon-button icon-button--danger" type="button" data-delete-expense="${escapeHtml(e.id)}" title="Xóa">🗑</button></div></td></tr>`; }).join("");
   }
 
   function setExpenseIncluded(id, included) {
@@ -467,15 +501,16 @@
 
   function renderSummary() {
     const trip = activeTrip();
-    const summary = Logic.calculateOutstandingSummary(trip.members, trip.expenses, trip.payments);
+    const summary = Logic.calculateOutstandingSummary(trip.members, trip.expenses, trip.payments, trip.fundTransactions, trip.fundKeeperId);
     dom.summaryTableBody.innerHTML = trip.members.length ? trip.members.map((m) => {
       const row = summary[m.id];
       const cls = row.balance > 0 ? "balance-positive" : row.balance < 0 ? "balance-negative" : "";
       const hasPayment = row.transferred > 0 || row.received > 0;
       const status = row.balance > 0 ? '<span class="status-badge status-badge--receive">Còn được nhận</span>' : row.balance < 0 ? '<span class="status-badge status-badge--pay">Còn phải trả</span>' : hasPayment ? '<span class="status-badge status-badge--done">Đã thanh toán</span>' : '<span class="status-badge status-badge--done">Đã cân bằng</span>';
-      return `<tr class="${hasPayment && row.balance === 0 ? "summary-row--settled" : ""}"><td><strong>${escapeHtml(m.name)}</strong></td><td class="align-right">${formatCurrency(row.owed)}</td><td class="align-right prepaid-amount">${formatCurrency(row.prepaid)}</td><td class="align-right">${formatCurrency(row.paid)}</td><td class="align-right payment-out">${formatCurrency(row.transferred)}</td><td class="align-right payment-in">${formatCurrency(row.received)}</td><td class="align-right amount ${cls}">${row.balance > 0 ? "+" : ""}${formatCurrency(row.balance)}</td><td>${status}</td></tr>`;
-    }).join("") : '<tr><td colspan="8" class="empty-state">Chưa có thành viên.</td></tr>';
-    const transfers = Logic.calculateSettlements(trip.members, trip.expenses, trip.payments);
+      const advanceNote = row.advanceShortfall ? `<small class="advance-shortfall">Thiếu ${formatCurrency(row.advanceShortfall)}</small>` : "";
+      return `<tr class="${hasPayment && row.balance === 0 ? "summary-row--settled" : ""}"><td><strong>${escapeHtml(m.name)}</strong>${row.fundHeld ? `<small class="fund-held-note">Đang giữ ${formatCurrency(Math.abs(row.fundHeld))} quỹ</small>` : ""}</td><td class="align-right">${formatCurrency(row.owed)}</td><td class="align-right prepaid-amount">${formatCurrency(row.prepaid)}</td><td class="align-right payment-in">${formatCurrency(row.refunded)}</td><td class="align-right prepaid-remaining">${formatCurrency(row.remainingAdvance)}${advanceNote}</td><td class="align-right">${formatCurrency(row.paid)}</td><td class="align-right payment-out">${formatCurrency(row.transferred)}</td><td class="align-right payment-in">${formatCurrency(row.received)}</td><td class="align-right amount ${cls}">${row.balance > 0 ? "+" : ""}${formatCurrency(row.balance)}</td><td>${status}</td></tr>`;
+    }).join("") : '<tr><td colspan="10" class="empty-state">Chưa có thành viên.</td></tr>';
+    const transfers = Logic.calculateSettlements(trip.members, trip.expenses, trip.payments, trip.fundTransactions, trip.fundKeeperId);
     dom.settlementList.innerHTML = transfers.length ? transfers.map((t) => `<div class="settlement-item settlement-item--pending"><div class="settlement-person">${escapeHtml(t.fromName)}<small>cần trả</small></div><div class="transfer-arrow"><span>chuyển cho</span><strong>${formatCurrency(t.amount)}</strong><span>→</span></div><div class="settlement-person">${escapeHtml(t.toName)}<small>sẽ nhận</small></div><button class="btn btn--paid" type="button" data-mark-paid="${escapeHtml(t.fromId)}" data-paid-to="${escapeHtml(t.toId)}" data-paid-amount="${t.amount}">✓ Đánh dấu đã trả</button></div>`).join("") : '<div class="empty-state empty-state--success">✓ Không còn khoản tiền nào cần chuyển.</div>';
     const payments = [...trip.payments].sort((a, b) => String(b.paidAt).localeCompare(String(a.paidAt)));
     dom.paymentHistoryList.innerHTML = payments.length ? payments.map((payment) => `<div class="settlement-item settlement-item--paid"><div class="settlement-person">${escapeHtml(memberName(payment.fromId))}<small>đã trả</small></div><div class="transfer-arrow"><span>${escapeHtml(formatExpenseDateTime(payment.paidAt))}</span><strong>${formatCurrency(payment.amount)}</strong><span>→</span></div><div class="settlement-person">${escapeHtml(memberName(payment.toId))}<small>đã nhận</small></div><button class="link-button link-button--danger" type="button" data-undo-payment="${escapeHtml(payment.id)}">Hoàn tác</button></div>`).join("") : '<div class="empty-state">Chưa có giao dịch nào được đánh dấu đã trả.</div>';
@@ -486,7 +521,7 @@
     dom.statTotal.textContent = formatCurrency(included.reduce((sum, e) => sum + e.amount, 0));
     dom.statExpenseCount.textContent = included.length === trip.expenses.length ? String(included.length) : `${included.length}/${trip.expenses.length}`;
     dom.statMemberCount.textContent = trip.members.length;
-    dom.statTransferCount.textContent = Logic.calculateSettlements(trip.members, trip.expenses, trip.payments).length;
+    dom.statTransferCount.textContent = Logic.calculateSettlements(trip.members, trip.expenses, trip.payments, trip.fundTransactions, trip.fundKeeperId).length;
   }
 
   function selectedSplitMode() { return $('input[name="splitMode"]:checked')?.value || "equal"; }
@@ -547,20 +582,20 @@
   function resetExpenseForm() {
     editingExpenseId = null; dom.expenseForm.reset(); dom.expenseDate.value = localDateString(); dom.expenseCategory.value = "Ăn uống";
     dom.expenseFormTitle.textContent = "Thêm khoản chi"; dom.btnSaveExpense.textContent = "Lưu khoản chi"; dom.btnCancelEdit.classList.add("hidden"); dom.expenseError.textContent = "";
-    renderPayerOptions(); renderParticipants(activeTrip().members.map((m) => m.id)); updateSplitEditor();
+    renderPayerOptions(); dom.expensePaymentSource.value = "personal"; updateExpensePaymentSource(); renderParticipants(activeTrip().members.map((m) => m.id)); updateSplitEditor();
   }
   function beginEditExpense(id) {
     const e = activeTrip().expenses.find((item) => item.id === id); if (!e) return;
     editingExpenseId = id; dom.expenseFormTitle.textContent = "Sửa khoản chi"; dom.btnSaveExpense.textContent = "Cập nhật"; dom.btnCancelEdit.classList.remove("hidden");
-    dom.expenseDescription.value = e.description; dom.expenseAmount.value = formatNumber(e.amount); dom.expensePayer.value = e.payerId; dom.expenseDate.value = expenseDateInput(e.date); dom.expenseCategory.value = e.category || "Khác"; dom.expenseNote.value = e.note || "";
+    dom.expenseDescription.value = e.description; dom.expenseAmount.value = formatNumber(e.amount); dom.expensePaymentSource.value = Logic.isFundExpense(e) ? "fund" : "personal"; dom.expensePayer.value = e.payerId; updateExpensePaymentSource(); dom.expenseDate.value = expenseDateInput(e.date); dom.expenseCategory.value = e.category || "Khác"; dom.expenseNote.value = e.note || "";
     $(`input[name="splitMode"][value="${e.splitMode || "equal"}"]`).checked = true; renderParticipants(e.participantIds); updateSplitEditor();
     if (e.splitMode === "custom") Object.entries(e.customShares || {}).forEach(([id2, value]) => { const input = $(`#customShares input[data-share-member="${CSS.escape(id2)}"]`); if (input) input.value = Number(value) > 0 ? formatNumber(value) : ""; });
     updateCustomSuggestions(); dom.expenseForm.scrollIntoView({ behavior: "smooth", block: "start" });
   }
   function validateExpense() {
-    const data = { description: dom.expenseDescription.value.trim(), amount: parseMoney(dom.expenseAmount.value), payerId: dom.expensePayer.value, participantIds: selectedParticipantIds(), splitMode: selectedSplitMode(), customShares: {}, date: dom.expenseDate.value, category: dom.expenseCategory.value, note: dom.expenseNote.value.trim() };
+    const data = { description: dom.expenseDescription.value.trim(), amount: parseMoney(dom.expenseAmount.value), payerId: dom.expensePayer.value, paymentSource: dom.expensePaymentSource.value === "fund" ? "fund" : "personal", participantIds: selectedParticipantIds(), splitMode: selectedSplitMode(), customShares: {}, date: dom.expenseDate.value, category: dom.expenseCategory.value, note: dom.expenseNote.value.trim() };
     if (!data.description) return { message: "Vui lòng nhập nội dung khoản chi." }; if (!data.amount) return { message: "Tổng tiền phải lớn hơn 0." };
-    if (!activeTrip().members.some((m) => m.id === data.payerId)) return { message: "Vui lòng chọn người trả." }; if (!data.participantIds.length) return { message: "Chọn ít nhất một người tham gia." };
+    if (!activeTrip().members.some((m) => m.id === data.payerId)) return { message: data.paymentSource === "fund" ? "Hãy chọn người giữ quỹ trước." : "Vui lòng chọn người trả." }; if (!data.participantIds.length) return { message: "Chọn ít nhất một người tham gia." };
     if (data.splitMode === "custom") {
       const plan = getCustomSharePlan();
       if (plan.invalidEntries.length) return { message: "Chỉ nhập số tiền hoặc tỷ lệ từ 0% đến 100%." };
@@ -614,6 +649,10 @@
     if (email && trip.members.some((m) => m.id !== editingMemberId && m.email === email)) { dom.memberError.textContent = "Email đã thuộc một thành viên trong trip này."; return; }
     const existing = trip.members.find((m) => m.id === editingMemberId);
     if (existing) {
+      const memberTransactions = trip.fundTransactions.filter((item) => item.memberId === existing.id);
+      const extraDeposits = memberTransactions.filter((item) => item.type === "deposit").reduce((sum, item) => sum + item.amount, 0);
+      const refunded = memberTransactions.filter((item) => item.type === "refund").reduce((sum, item) => sum + item.amount, 0);
+      if (prepaidAmount + extraDeposits < refunded) { dom.memberError.textContent = `Tạm ứng ban đầu không thể thấp đến mức tổng đã hoàn ${formatCurrency(refunded)} vượt tổng đã nạp.`; return; }
       existing.name = name;
       existing.email = email;
       existing.prepaidAmount = prepaidAmount;
@@ -624,22 +663,53 @@
   }
   function removeMember(id) {
     const trip = activeTrip(), member = trip.members.find((m) => m.id === id); if (!member) return;
-    if (trip.expenses.some((e) => e.payerId === id || e.participantIds.includes(id))) { showToast("Không thể xóa thành viên đang có dữ liệu chi phí."); return; }
+    if (trip.expenses.some((e) => e.payerId === id || e.participantIds.includes(id)) || trip.fundTransactions.some((transaction) => transaction.memberId === id) || trip.fundKeeperId === id) { showToast("Không thể xóa thành viên đang có dữ liệu chi phí hoặc quỹ."); return; }
     trip.members = trip.members.filter((m) => m.id !== id); if (editingMemberId === id) resetMemberForm(); savePortfolio(); render();
+  }
+
+  function saveFundTransaction() {
+    const trip = activeTrip();
+    const memberId = dom.fundTransactionMember.value;
+    const type = dom.fundTransactionType.value === "refund" ? "refund" : "deposit";
+    const amount = parseMoney(dom.fundTransactionAmount.value);
+    const note = dom.fundTransactionNote.value.trim();
+    dom.fundError.textContent = "";
+    if (!trip.members.some((member) => member.id === memberId)) { dom.fundError.textContent = "Hãy chọn thành viên."; return; }
+    if (!amount) { dom.fundError.textContent = "Số tiền phải lớn hơn 0."; return; }
+    if (type === "refund") {
+      const fund = Logic.calculateFundSummary(trip.members, trip.expenses, trip.fundTransactions, trip.fundKeeperId);
+      const memberFund = fund.memberRows[memberId];
+      if (amount > memberFund.remainingAdvance) { dom.fundError.textContent = `Thành viên chỉ còn ${formatCurrency(memberFund.remainingAdvance)} tạm ứng chưa sử dụng.`; return; }
+      if (amount > Math.max(0, fund.fundBalance)) { dom.fundError.textContent = `Quỹ hiện chỉ còn ${formatCurrency(Math.max(0, fund.fundBalance))}.`; return; }
+    }
+    trip.fundTransactions.push({ id: uid("fund"), memberId, type, amount, note, occurredAt: now() });
+    dom.fundTransactionForm.reset();
+    savePortfolio(type === "refund" ? "Đã ghi nhận hoàn quỹ" : "Đã ghi nhận nạp quỹ");
+    render();
+    showToast(type === "refund" ? "Đã ghi nhận tiền hoàn cho thành viên." : "Đã cộng tiền nạp thêm vào quỹ.");
+  }
+
+  function deleteFundTransaction(id) {
+    const trip = activeTrip();
+    const transaction = trip.fundTransactions.find((item) => item.id === id);
+    if (!transaction || !confirm("Xóa giao dịch quỹ này và tính lại toàn bộ đối soát?")) return;
+    trip.fundTransactions = trip.fundTransactions.filter((item) => item.id !== id);
+    savePortfolio("Đã xóa giao dịch quỹ"); render(); showToast("Đã xóa và tính lại số dư quỹ.");
   }
 
   function download(filename, content, mime) { const blob = new Blob([content], { type: mime }), url = URL.createObjectURL(blob), a = document.createElement("a"); a.href = url; a.download = filename; a.click(); URL.revokeObjectURL(url); }
   function safeFilename(value) { return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase() || "trip"; }
   function csvCell(value) { return `"${String(value ?? "").replaceAll('"', '""')}"`; }
   function buildSheetPayload() {
-    const trip = activeTrip(), summary = Logic.calculateOutstandingSummary(trip.members, trip.expenses, trip.payments), settlements = Logic.calculateSettlements(trip.members, trip.expenses, trip.payments);
+    const trip = activeTrip(), fund = Logic.calculateFundSummary(trip.members, trip.expenses, trip.fundTransactions, trip.fundKeeperId), summary = Logic.calculateOutstandingSummary(trip.members, trip.expenses, trip.payments, trip.fundTransactions, trip.fundKeeperId), settlements = Logic.calculateSettlements(trip.members, trip.expenses, trip.payments, trip.fundTransactions, trip.fundKeeperId);
     const payments = trip.payments.map((payment) => ({ ...payment, fromName: memberName(payment.fromId), toName: memberName(payment.toId) }));
-    return { version: 3, trip: { id: trip.id, name: trip.name, destination: trip.destination, startDate: trip.startDate, endDate: trip.endDate, status: statusLabel(trip.status), members: trip.members, expenses: trip.expenses.map((e) => ({ ...e, included: Logic.isExpenseIncluded(e), averagePerPerson: averagePerParticipant(e), payerName: memberName(e.payerId), participantNames: e.participantIds.map(memberName), shares: Logic.getExpenseShares(e) })) }, summary: trip.members.map((m) => ({ ...summary[m.id], email: m.email || "", prepaid: Logic.toSafeInteger(m.prepaidAmount) })), settlements, payments, generatedAt: now() };
+    return { version: 4, trip: { id: trip.id, name: trip.name, destination: trip.destination, startDate: trip.startDate, endDate: trip.endDate, status: statusLabel(trip.status), members: trip.members, fundKeeperId: trip.fundKeeperId, fundKeeperName: memberName(trip.fundKeeperId), fundTransactions: trip.fundTransactions.map((item) => ({ ...item, memberName: memberName(item.memberId) })), expenses: trip.expenses.map((e) => ({ ...e, included: Logic.isExpenseIncluded(e), paymentSource: Logic.isFundExpense(e) ? "fund" : "personal", paymentSourceLabel: Logic.isFundExpense(e) ? "Quỹ chuyến đi" : "Cá nhân tự trả", averagePerPerson: averagePerParticipant(e), payerName: memberName(e.payerId), participantNames: e.participantIds.map(memberName), shares: Logic.getExpenseShares(e) })) }, fund, summary: trip.members.map((m) => ({ ...summary[m.id], email: m.email || "" })), settlements, payments, generatedAt: now() };
   }
   function exportCsv() {
-    const payload = buildSheetPayload(), rows = [["CHUYẾN ĐI", payload.trip.name], ["Điểm đến", payload.trip.destination], ["Thời gian", formatDateRange(activeTrip())], [], ["CHI PHÍ"], ["Quyết toán", "Nội dung", "Ngày & giờ", "Nhóm", "Tổng tiền", "Tổng tiền/người", "Người trả", "Người tham gia", "Cách chia", "Ghi chú"]];
-    payload.trip.expenses.forEach((e) => rows.push([e.included ? "Đang tính" : "Kế hoạch - chưa tính", e.description, e.date, e.category, e.amount, e.averagePerPerson, e.payerName, e.participantNames.join(", "), e.splitMode === "custom" ? "Tùy chỉnh" : "Chia đều", e.note]));
-    rows.push([], ["ĐỐI SOÁT"], ["Thành viên", "Email", "Phải chịu", "Tạm ứng đã thu", "Đã ứng chi phí", "Đã chuyển", "Đã nhận", "Còn lại"]); payload.summary.forEach((r) => rows.push([r.name, r.email, r.owed, r.prepaid, r.paid, r.transferred, r.received, r.balance]));
+    const payload = buildSheetPayload(), rows = [["CHUYẾN ĐI", payload.trip.name], ["Điểm đến", payload.trip.destination], ["Thời gian", formatDateRange(activeTrip())], ["Người giữ quỹ", payload.trip.fundKeeperName], ["Tổng đã nạp", payload.fund.totalDeposited], ["Chi từ quỹ", payload.fund.fundSpent], ["Đã hoàn", payload.fund.totalRefunded], ["Quỹ còn lại", payload.fund.fundBalance], [], ["CHI PHÍ"], ["Quyết toán", "Nội dung", "Ngày & giờ", "Nhóm", "Nguồn tiền", "Tổng tiền", "Tổng tiền/người", "Người trả/giữ quỹ", "Người tham gia", "Cách chia", "Ghi chú"]];
+    payload.trip.expenses.forEach((e) => rows.push([e.included ? "Đang tính" : "Kế hoạch - chưa tính", e.description, e.date, e.category, e.paymentSourceLabel, e.amount, e.averagePerPerson, e.payerName, e.participantNames.join(", "), e.splitMode === "custom" ? "Tùy chỉnh" : "Chia đều", e.note]));
+    rows.push([], ["SỔ QUỸ"], ["Thời gian", "Thành viên", "Loại", "Số tiền", "Ghi chú"]); payload.trip.fundTransactions.forEach((r) => rows.push([r.occurredAt, r.memberName, r.type === "refund" ? "Hoàn" : "Nạp", r.amount, r.note]));
+    rows.push([], ["ĐỐI SOÁT"], ["Thành viên", "Email", "Phải chịu", "Tổng tạm ứng", "Đã hoàn", "Còn lại tạm ứng", "Đã ứng cá nhân", "Đã chuyển", "Đã nhận", "Quyết toán"]); payload.summary.forEach((r) => rows.push([r.name, r.email, r.owed, r.prepaid, r.refunded, r.remainingAdvance, r.paid, r.transferred, r.received, r.balance]));
     rows.push([], ["CÔNG NỢ CHƯA THANH TOÁN"], ["Người cần trả", "Người cần nhận", "Số tiền", "Trạng thái"]); payload.settlements.forEach((r) => rows.push([r.fromName, r.toName, r.amount, "Chưa thanh toán"]));
     rows.push([], ["LỊCH SỬ ĐÃ THANH TOÁN"], ["Người trả", "Người nhận", "Số tiền", "Thời gian"]); payload.payments.forEach((r) => rows.push([r.fromName, r.toName, r.amount, r.paidAt]));
     download(`${safeFilename(payload.trip.name)}.csv`, "\uFEFF" + rows.map((r) => r.map(csvCell).join(",")).join("\r\n"), "text/csv;charset=utf-8");
@@ -654,26 +724,28 @@
   function buildPdfReport() {
     const trip = activeTrip();
     const model = Report.buildModel(trip, Logic);
-    const { summary, settlements, totalExpense, totalPrepaid, totalOutstanding, collectedDifference, plannedTotal } = model;
+    const { summary, settlements, fund, totalExpense, totalPrepaid, totalOutstanding, collectedDifference, plannedTotal } = model;
     const generatedAt = new Intl.DateTimeFormat("vi-VN", { dateStyle: "full", timeStyle: "short" }).format(new Date());
     const summaryRows = trip.members.map((member) => {
       const row = summary[member.id];
       const status = reportBalanceStatus(row);
-      return `<tr><td><strong>${escapeHtml(member.name)}</strong>${member.email ? `<br><small>${escapeHtml(member.email)}</small>` : ""}</td><td class="num">${formatCurrency(row.prepaid)}</td><td class="num">${formatCurrency(row.owed)}</td><td class="num">${formatCurrency(row.paid)}</td><td class="num">${formatCurrency(row.transferred)}</td><td class="num">${formatCurrency(row.received)}</td><td class="num ${status.className}">${row.balance > 0 ? "+" : ""}${formatCurrency(row.balance)}</td><td class="${status.className}">${status.label}</td></tr>`;
+      return `<tr><td><strong>${escapeHtml(member.name)}</strong>${member.email ? `<br><small>${escapeHtml(member.email)}</small>` : ""}</td><td class="num">${formatCurrency(row.prepaid)}</td><td class="num">${formatCurrency(row.refunded)}</td><td class="num">${formatCurrency(row.remainingAdvance)}</td><td class="num">${formatCurrency(row.owed)}</td><td class="num">${formatCurrency(row.paid)}</td><td class="num ${status.className}">${row.balance > 0 ? "+" : ""}${formatCurrency(row.balance)}</td><td class="${status.className}">${status.label}</td></tr>`;
     }).join("");
     const settlementRows = settlements.map((item, index) => `<tr><td>${index + 1}</td><td><strong>${escapeHtml(item.fromName)}</strong></td><td>chuyển cho</td><td><strong>${escapeHtml(item.toName)}</strong></td><td class="num status-pay">${formatCurrency(item.amount)}</td><td>Chưa thanh toán</td></tr>`).join("");
-    const expenseRows = [...model.includedExpenses].sort((a, b) => String(a.date).localeCompare(String(b.date))).map((item, index) => `<tr><td>${index + 1}</td><td>${escapeHtml(formatExpenseDateTime(item.date))}</td><td><strong>${escapeHtml(item.description)}</strong>${item.note ? `<br><small>${escapeHtml(item.note)}</small>` : ""}</td><td>${escapeHtml(item.category || "Khác")}</td><td>${escapeHtml(memberName(item.payerId))}</td><td>${escapeHtml(item.participantIds.map(memberName).join(", "))}</td><td class="num"><strong>${formatCurrency(item.amount)}</strong><br><small>${formatCurrency(averagePerParticipant(item))}/người</small></td></tr>`).join("");
+    const expenseRows = [...model.includedExpenses].sort((a, b) => String(a.date).localeCompare(String(b.date))).map((item, index) => `<tr><td>${index + 1}</td><td>${escapeHtml(formatExpenseDateTime(item.date))}</td><td><strong>${escapeHtml(item.description)}</strong>${item.note ? `<br><small>${escapeHtml(item.note)}</small>` : ""}</td><td>${escapeHtml(item.category || "Khác")}</td><td>${Logic.isFundExpense(item) ? "Quỹ chuyến đi" : `Cá nhân · ${escapeHtml(memberName(item.payerId))}`}</td><td>${escapeHtml(item.participantIds.map(memberName).join(", "))}</td><td class="num"><strong>${formatCurrency(item.amount)}</strong><br><small>${formatCurrency(averagePerParticipant(item))}/người</small></td></tr>`).join("");
     const plannedRows = [...model.plannedExpenses].sort((a, b) => String(a.date).localeCompare(String(b.date))).map((item, index) => `<tr><td>${index + 1}</td><td>${escapeHtml(formatExpenseDateTime(item.date))}</td><td><strong>${escapeHtml(item.description)}</strong>${item.note ? `<br><small>${escapeHtml(item.note)}</small>` : ""}</td><td>${escapeHtml(item.category || "Khác")}</td><td>${escapeHtml(memberName(item.payerId))}</td><td class="num">${formatCurrency(item.amount)}</td><td>Chưa tính</td></tr>`).join("");
     const paymentRows = [...trip.payments].sort((a, b) => String(b.paidAt).localeCompare(String(a.paidAt))).map((item, index) => `<tr><td>${index + 1}</td><td>${escapeHtml(formatExpenseDateTime(item.paidAt))}</td><td>${escapeHtml(memberName(item.fromId))}</td><td>${escapeHtml(memberName(item.toId))}</td><td class="num status-done">${formatCurrency(item.amount)}</td><td>Đã thanh toán</td></tr>`).join("");
+    const fundRows = [...trip.fundTransactions].sort((a, b) => String(a.occurredAt).localeCompare(String(b.occurredAt))).map((item, index) => `<tr><td>${index + 1}</td><td>${escapeHtml(formatExpenseDateTime(item.occurredAt))}</td><td>${escapeHtml(memberName(item.memberId))}</td><td>${item.type === "refund" ? "Hoàn tiền" : "Nạp thêm"}</td><td class="num ${item.type === "refund" ? "status-pay" : "status-receive"}">${item.type === "refund" ? "−" : "+"}${formatCurrency(item.amount)}</td><td>${escapeHtml(item.note || "")}</td></tr>`).join("");
 
     return `<header class="pdf-report__header"><div><div class="pdf-report__brand">✈ TripSplit · Báo cáo thu chi</div><h1>${escapeHtml(trip.name)}</h1><div class="pdf-report__meta">${escapeHtml(trip.destination || "Chưa cập nhật điểm đến")} · ${escapeHtml(formatDateRange(trip))} · ${escapeHtml(statusLabel(trip.status))}<br>${trip.members.length} thành viên · ${model.includedExpenses.length} khoản đã chốt · ${model.plannedExpenses.length} khoản kế hoạch</div></div><div class="pdf-report__generated">Ngày lập báo cáo<br><strong>${escapeHtml(generatedAt)}</strong></div></header>
-      <section class="pdf-report__stats"><div class="pdf-report__stat pdf-report__stat--income"><span>Đã thu tạm ứng</span><strong>${formatCurrency(totalPrepaid)}</strong></div><div class="pdf-report__stat pdf-report__stat--expense"><span>Chi phí đã chốt</span><strong>${formatCurrency(totalExpense)}</strong></div><div class="pdf-report__stat"><span>Chi phí kế hoạch</span><strong>${formatCurrency(plannedTotal)}</strong></div><div class="pdf-report__stat"><span>Thu trước - chi phí</span><strong>${collectedDifference > 0 ? "+" : ""}${formatCurrency(collectedDifference)}</strong></div><div class="pdf-report__stat pdf-report__stat--debt"><span>Công nợ còn lại</span><strong>${formatCurrency(totalOutstanding)}</strong></div></section>
-      <section class="pdf-report__section"><h2>1. Đối soát theo thành viên</h2><p class="pdf-report__section-note">Tạm ứng là khoản thu trước cố định; số dư chi phí được tính từ người thực trả và phần phải chịu.</p>${summaryRows ? `<table><thead><tr><th>Thành viên</th><th class="num">Tạm ứng</th><th class="num">Phải chịu</th><th class="num">Ứng chi phí</th><th class="num">Đã chuyển</th><th class="num">Đã nhận</th><th class="num">Còn lại</th><th>Trạng thái</th></tr></thead><tbody>${summaryRows}</tbody></table>` : '<div class="pdf-report__empty">Chưa có thành viên.</div>'}</section>
+      <section class="pdf-report__stats"><div class="pdf-report__stat pdf-report__stat--income"><span>Tổng tiền đã nạp</span><strong>${formatCurrency(totalPrepaid)}</strong></div><div class="pdf-report__stat pdf-report__stat--expense"><span>Chi phí đã chốt</span><strong>${formatCurrency(totalExpense)}</strong></div><div class="pdf-report__stat"><span>Chi từ quỹ</span><strong>${formatCurrency(fund.fundSpent)}</strong></div><div class="pdf-report__stat"><span>Đã hoàn thành viên</span><strong>${formatCurrency(fund.totalRefunded)}</strong></div><div class="pdf-report__stat ${collectedDifference < 0 ? "pdf-report__stat--debt" : "pdf-report__stat--income"}"><span>${collectedDifference < 0 ? "Quỹ đang thiếu" : "Quỹ còn lại"}</span><strong>${formatCurrency(Math.abs(collectedDifference))}</strong></div><div class="pdf-report__stat"><span>Chi phí kế hoạch</span><strong>${formatCurrency(plannedTotal)}</strong></div><div class="pdf-report__stat pdf-report__stat--debt"><span>Công nợ còn lại</span><strong>${formatCurrency(totalOutstanding)}</strong></div></section>
+      <section class="pdf-report__section"><h2>1. Đối soát theo thành viên</h2><p class="pdf-report__section-note">Tổng tạm ứng gồm tiền ban đầu và các lần nạp thêm. “Còn lại tạm ứng” là số tiền chưa sử dụng và chưa hoàn của từng người.</p>${summaryRows ? `<table><thead><tr><th>Thành viên</th><th class="num">Tổng tạm ứng</th><th class="num">Đã hoàn</th><th class="num">Còn tạm ứng</th><th class="num">Phải chịu</th><th class="num">Ứng cá nhân</th><th class="num">Quyết toán</th><th>Trạng thái</th></tr></thead><tbody>${summaryRows}</tbody></table>` : '<div class="pdf-report__empty">Chưa có thành viên.</div>'}</section>
       <section class="pdf-report__section"><h2>2. Ai còn nợ ai?</h2>${settlementRows ? `<table><thead><tr><th>STT</th><th>Người cần trả</th><th></th><th>Người cần nhận</th><th class="num">Số tiền</th><th>Trạng thái</th></tr></thead><tbody>${settlementRows}</tbody></table>` : '<div class="pdf-report__empty">✓ Chuyến đi hiện không còn giao dịch cần thanh toán.</div>'}</section>
-      <section class="pdf-report__section"><h2>3. Chi tiết chi phí đã chốt</h2>${expenseRows ? `<table><thead><tr><th>STT</th><th>Ngày & giờ</th><th>Nội dung</th><th>Nhóm</th><th>Người trả</th><th>Người tham gia</th><th class="num">Số tiền</th></tr></thead><tbody>${expenseRows}</tbody></table>` : '<div class="pdf-report__empty">Chưa có khoản chi được bật quyết toán.</div>'}</section>
-      <section class="pdf-report__section"><h2>4. Chi phí kế hoạch chưa tính</h2>${plannedRows ? `<table><thead><tr><th>STT</th><th>Ngày & giờ</th><th>Nội dung</th><th>Nhóm</th><th>Người dự kiến trả</th><th class="num">Số tiền</th><th>Trạng thái</th></tr></thead><tbody>${plannedRows}</tbody></table>` : '<div class="pdf-report__empty">Không có khoản kế hoạch đang tắt.</div>'}</section>
-      <section class="pdf-report__section"><h2>5. Lịch sử đã thanh toán</h2>${paymentRows ? `<table><thead><tr><th>STT</th><th>Thời gian</th><th>Người trả</th><th>Người nhận</th><th class="num">Số tiền</th><th>Trạng thái</th></tr></thead><tbody>${paymentRows}</tbody></table>` : '<div class="pdf-report__empty">Chưa có giao dịch được đánh dấu đã thanh toán.</div>'}</section>
-      <section class="pdf-report__section"><h2>6. Lưu ý cách đọc báo cáo</h2><div class="pdf-report__notes"><ul><li>“Đã thu tạm ứng” là khoản cố định khai báo trong hồ sơ thành viên và không tự thay đổi trong chuyến đi.</li><li>“Chi phí kế hoạch” được liệt kê để tham khảo nhưng không tham gia tổng chi, chia tiền hay công nợ.</li><li>“Đã ứng chi phí” là số tiền thành viên trực tiếp thanh toán cho các hóa đơn đang bật quyết toán.</li><li>Chỉ số “Thu trước - chi phí” dùng để tham khảo quy mô quỹ; công nợ thực tế căn cứ người trả, người tham gia và lịch sử thanh toán.</li><li>Số dư âm nghĩa là còn phải trả; số dư dương nghĩa là còn được nhận.</li></ul></div></section>
+      <section class="pdf-report__section"><h2>3. Sổ quỹ chuyến đi</h2><p class="pdf-report__section-note">Người giữ quỹ: <strong>${escapeHtml(memberName(trip.fundKeeperId))}</strong>.</p>${fundRows ? `<table><thead><tr><th>STT</th><th>Thời gian</th><th>Thành viên</th><th>Loại</th><th class="num">Số tiền</th><th>Ghi chú</th></tr></thead><tbody>${fundRows}</tbody></table>` : '<div class="pdf-report__empty">Chưa có lần nạp thêm hoặc hoàn tiền.</div>'}</section>
+      <section class="pdf-report__section"><h2>4. Chi tiết chi phí đã chốt</h2>${expenseRows ? `<table><thead><tr><th>STT</th><th>Ngày & giờ</th><th>Nội dung</th><th>Nhóm</th><th>Nguồn tiền</th><th>Người tham gia</th><th class="num">Số tiền</th></tr></thead><tbody>${expenseRows}</tbody></table>` : '<div class="pdf-report__empty">Chưa có khoản chi được bật quyết toán.</div>'}</section>
+      <section class="pdf-report__section"><h2>5. Chi phí kế hoạch chưa tính</h2>${plannedRows ? `<table><thead><tr><th>STT</th><th>Ngày & giờ</th><th>Nội dung</th><th>Nhóm</th><th>Người dự kiến trả</th><th class="num">Số tiền</th><th>Trạng thái</th></tr></thead><tbody>${plannedRows}</tbody></table>` : '<div class="pdf-report__empty">Không có khoản kế hoạch đang tắt.</div>'}</section>
+      <section class="pdf-report__section"><h2>6. Lịch sử đã thanh toán</h2>${paymentRows ? `<table><thead><tr><th>STT</th><th>Thời gian</th><th>Người trả</th><th>Người nhận</th><th class="num">Số tiền</th><th>Trạng thái</th></tr></thead><tbody>${paymentRows}</tbody></table>` : '<div class="pdf-report__empty">Chưa có giao dịch được đánh dấu đã thanh toán.</div>'}</section>
+      <section class="pdf-report__section"><h2>7. Lưu ý cách đọc báo cáo</h2><div class="pdf-report__notes"><ul><li>“Tổng tiền đã nạp” gồm tạm ứng ban đầu và toàn bộ lần nạp thêm, chưa trừ tiền đã hoàn.</li><li>Khoản chi chọn “Quỹ chuyến đi” làm giảm tiền mặt người giữ quỹ; khoản “Cá nhân tự trả” tạo quyền được nhận lại cho người trực tiếp trả.</li><li>“Còn lại tạm ứng” là phần nạp quỹ chưa dùng và chưa hoàn của từng thành viên; tổng có thể khác số tiền cuối cùng cần chuyển nếu có chi cá nhân.</li><li>“Chi phí kế hoạch” chỉ để tham khảo và không tham gia tổng chi, quỹ hay công nợ.</li><li>Số quyết toán âm nghĩa là còn phải trả; số dương nghĩa là còn được nhận.</li></ul></div></section>
       <footer class="pdf-report__footer">Báo cáo được tạo tự động bởi TripSplit · Vui lòng đối chiếu chứng từ trước khi quyết toán.</footer>`;
   }
 
@@ -690,7 +762,7 @@
     const printWindow = window.open("", "_blank");
     if (!printWindow) { showToast("Trình duyệt đang chặn cửa sổ lưu PDF. Hãy cho phép popup rồi thử lại."); return; }
     printWindow.opener = null;
-    const stylesheetUrl = new URL("styles.css?v=16", window.location.href).toString();
+    const stylesheetUrl = new URL("styles.css?v=17", window.location.href).toString();
     const title = `Bao-cao-thu-chi-${safeFilename(activeTrip().name)}`;
     printWindow.document.open();
     printWindow.document.write(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title><link rel="stylesheet" href="${escapeHtml(stylesheetUrl)}"><style>@page{size:A4;margin:12mm}html,body{margin:0!important;background:#fff!important}.pdf-report{width:auto!important;min-height:0!important;margin:0!important;padding:0!important;box-shadow:none!important}.pdf-report__section{break-inside:auto}.pdf-report tr,.pdf-report__stat,.pdf-report__notes{break-inside:avoid}.pdf-report__footer{margin-top:18px}</style></head><body><article class="pdf-report">${dom.pdfReport.innerHTML}</article></body></html>`);
@@ -824,12 +896,16 @@
   dom.btnDeleteTrip.addEventListener("click", () => { if (portfolio.trips.length === 1) { showToast("Cần giữ lại ít nhất một chuyến đi."); return; } const trip = activeTrip(); if (!confirm(`Xóa toàn bộ dữ liệu của “${trip.name}” khỏi thiết bị này?`)) return; portfolio.trips = portfolio.trips.filter((t) => t.id !== trip.id); portfolio.activeTripId = portfolio.trips[0].id; resetMemberForm(); localStorage.setItem(STORAGE_KEY, JSON.stringify(portfolio)); resetExpenseForm(); render(); setSharedUrl(activeTrip().shareId || ""); showToast("Đã xóa chuyến đi khỏi thiết bị này."); });
   dom.tripForm.addEventListener("submit", (event) => { event.preventDefault(); saveTripFromDialog(); }); [dom.btnCloseTripDialog, dom.btnCancelTrip].forEach((button) => button.addEventListener("click", () => dom.tripDialog.close()));
   dom.memberForm.addEventListener("submit", (event) => { event.preventDefault(); saveMember(); }); dom.memberPrepaidAmount.addEventListener("input", () => { const value = parseMoney(dom.memberPrepaidAmount.value); dom.memberPrepaidAmount.value = value ? formatNumber(value) : ""; }); dom.btnCancelMemberEdit.addEventListener("click", () => { resetMemberForm(); renderMembers(); }); dom.memberList.addEventListener("click", (event) => { const editButton = event.target.closest("[data-edit-member]"), removeButton = event.target.closest("[data-remove-member]"); if (editButton) beginEditMember(editButton.dataset.editMember); if (removeButton) removeMember(removeButton.dataset.removeMember); });
+  dom.fundKeeper.addEventListener("change", () => { const trip = activeTrip(); if (!trip.members.some((member) => member.id === dom.fundKeeper.value)) return; trip.fundKeeperId = dom.fundKeeper.value; trip.expenses.filter(Logic.isFundExpense).forEach((expense) => { expense.payerId = trip.fundKeeperId; }); savePortfolio("Đã đổi người giữ quỹ"); render(); showToast(`Đã chọn ${memberName(trip.fundKeeperId)} giữ quỹ.`); });
+  dom.fundTransactionForm.addEventListener("submit", (event) => { event.preventDefault(); saveFundTransaction(); });
+  dom.fundTransactionAmount.addEventListener("input", () => { const value = parseMoney(dom.fundTransactionAmount.value); dom.fundTransactionAmount.value = value ? formatNumber(value) : ""; });
+  dom.fundTransactionList.addEventListener("click", (event) => { const button = event.target.closest("[data-delete-fund-transaction]"); if (button) deleteFundTransaction(button.dataset.deleteFundTransaction); });
   dom.expenseForm.addEventListener("submit", (event) => { event.preventDefault(); const result = validateExpense(); if (result.message) { dom.expenseError.textContent = result.message; return; } const trip = activeTrip(); if (editingExpenseId) { const index = trip.expenses.findIndex((e) => e.id === editingExpenseId), existing = trip.expenses[index]; result.data.date = stampExpenseDate(result.data.date, existing.date); trip.expenses[index] = { ...existing, ...result.data, included: existing.included !== false, updatedAt: now() }; showToast("Đã cập nhật khoản chi."); } else { result.data.date = stampExpenseDate(result.data.date); trip.expenses.unshift({ id: uid("expense"), ...result.data, included: true, createdAt: now() }); showToast("Đã thêm khoản chi."); } savePortfolio(); resetExpenseForm(); render(); });
   dom.expenseTableBody.addEventListener("click", (event) => { const edit = event.target.closest("[data-edit-expense]"), remove = event.target.closest("[data-delete-expense]"); if (edit) beginEditExpense(edit.dataset.editExpense); if (remove) { const trip = activeTrip(), e = trip.expenses.find((item) => item.id === remove.dataset.deleteExpense); if (e && confirm(`Xóa khoản “${e.description}”?`)) { trip.expenses = trip.expenses.filter((item) => item.id !== e.id); if (editingExpenseId === e.id) resetExpenseForm(); savePortfolio(); render(); } } });
   dom.expenseTableBody.addEventListener("change", (event) => { const toggle = event.target.closest("[data-toggle-expense]"); if (toggle) setExpenseIncluded(toggle.dataset.toggleExpense, toggle.checked); });
   dom.settlementList.addEventListener("click", (event) => { const button = event.target.closest("[data-mark-paid]"); if (button) markSettlementPaid(button.dataset.markPaid, button.dataset.paidTo, button.dataset.paidAmount); });
   dom.paymentHistoryList.addEventListener("click", (event) => { const button = event.target.closest("[data-undo-payment]"); if (button) undoPayment(button.dataset.undoPayment); });
-  dom.expenseSearch.addEventListener("input", renderExpenses); dom.expenseAmount.addEventListener("input", () => { const value = parseMoney(dom.expenseAmount.value); dom.expenseAmount.value = value ? formatNumber(value) : ""; updateSplitEditor(); }); dom.participantList.addEventListener("change", updateSplitEditor); $$('input[name="splitMode"]').forEach((r) => r.addEventListener("change", updateSplitEditor)); dom.customShares.addEventListener("input", (event) => { const input = event.target.closest("[data-share-member]"); if (input) { if (!input.value.includes("%")) { const value = parseMoney(input.value); input.value = input.value.trim() ? formatNumber(value) : ""; } updateCustomSuggestions(); } });
+  dom.expenseSearch.addEventListener("input", renderExpenses); dom.expenseAmount.addEventListener("input", () => { const value = parseMoney(dom.expenseAmount.value); dom.expenseAmount.value = value ? formatNumber(value) : ""; updateSplitEditor(); }); dom.expensePaymentSource.addEventListener("change", updateExpensePaymentSource); dom.participantList.addEventListener("change", updateSplitEditor); $$('input[name="splitMode"]').forEach((r) => r.addEventListener("change", updateSplitEditor)); dom.customShares.addEventListener("input", (event) => { const input = event.target.closest("[data-share-member]"); if (input) { if (!input.value.includes("%")) { const value = parseMoney(input.value); input.value = input.value.trim() ? formatNumber(value) : ""; } updateCustomSuggestions(); } });
   dom.btnSelectAll.addEventListener("click", () => { $$('input[name="participant"]').forEach((i) => { i.checked = true; }); updateSplitEditor(); }); dom.btnClearParticipants.addEventListener("click", () => { $$('input[name="participant"]').forEach((i) => { i.checked = false; }); updateSplitEditor(); }); dom.btnCancelEdit.addEventListener("click", resetExpenseForm);
   dom.btnExportJson.addEventListener("click", () => download("trip-split-backup.json", JSON.stringify(portfolio, null, 2), "application/json;charset=utf-8")); dom.btnExportCsv.addEventListener("click", exportCsv); dom.btnPreviewPdf.addEventListener("click", openPdfPreview); dom.btnClosePdfPreview.addEventListener("click", closePdfPreview); dom.btnCancelPdfPreview.addEventListener("click", closePdfPreview); dom.btnPrintPdf.addEventListener("click", printPdfReport); dom.fileImportJson.addEventListener("change", () => { if (dom.fileImportJson.files[0]) importJson(dom.fileImportJson.files[0]); }); dom.btnGenerateSecret.addEventListener("click", generateAppsScriptSecret); dom.btnCheckAppsScript.addEventListener("click", checkAppsScript); dom.btnShareSheet.addEventListener("click", shareSheet); dom.appsScriptUrl.addEventListener("change", () => { localStorage.setItem(SCRIPT_URL_KEY, dom.appsScriptUrl.value.trim()); setSheetStatus("idle", "Chưa kiểm tra kết nối", "URL đã thay đổi. Hãy kiểm tra lại trước khi tạo Sheet."); }); dom.appsScriptSecret.addEventListener("change", () => localStorage.setItem(SCRIPT_SECRET_KEY, dom.appsScriptSecret.value.trim()));
 

@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#ffffff" />
   <meta name="description" content="Quản lý và chia chi phí cho nhiều chuyến đi, xuất và chia sẻ Google Sheet." />
   <title>TripSplit — Chia chi phí nhóm</title>
-  <link rel="stylesheet" href="styles.css?v=16" />
+  <link rel="stylesheet" href="styles.css?v=17" />
 </head>
 <body>
   <header class="appbar">
@@ -105,6 +105,25 @@
         <article class="stat-card stat-card--accent"><span>Giao dịch cần chuyển</span><strong id="statTransferCount">0</strong></article>
       </div>
 
+      <section class="card fund-card">
+        <div class="section-title section-title--row"><div><h2>Quỹ chuyến đi</h2><p>Ghi nhận tiền tạm ứng ban đầu, các lần nạp thêm, chi từ quỹ và tiền đã hoàn.</p></div><label class="fund-keeper-field">Người giữ quỹ<select id="fundKeeper"></select></label></div>
+        <div class="fund-kpis" aria-label="Tổng quan quỹ">
+          <article><span>Tổng tiền đã nạp</span><strong id="fundTotalDeposited">0 ₫</strong></article>
+          <article><span>Đã chi từ quỹ</span><strong id="fundTotalSpent">0 ₫</strong></article>
+          <article><span>Đã hoàn thành viên</span><strong id="fundTotalRefunded">0 ₫</strong></article>
+          <article id="fundBalanceCard"><span id="fundBalanceLabel">Quỹ còn lại</span><strong id="fundBalance">0 ₫</strong></article>
+        </div>
+        <form id="fundTransactionForm" class="fund-form">
+          <div class="field"><label for="fundTransactionMember">Thành viên</label><select id="fundTransactionMember"></select></div>
+          <div class="field"><label for="fundTransactionType">Loại giao dịch</label><select id="fundTransactionType"><option value="deposit">Nạp thêm vào quỹ</option><option value="refund">Hoàn tiền cho thành viên</option></select></div>
+          <div class="field"><label for="fundTransactionAmount">Số tiền</label><div class="money-input"><input id="fundTransactionAmount" type="text" inputmode="numeric" placeholder="0" autocomplete="off" /><span>₫</span></div></div>
+          <div class="field"><label for="fundTransactionNote">Ghi chú</label><input id="fundTransactionNote" type="text" maxlength="120" placeholder="Ví dụ: Nạp thêm lần 2" /></div>
+          <button class="btn btn--primary" type="submit">Ghi nhận</button>
+        </form>
+        <p id="fundError" class="field-error" aria-live="polite"></p>
+        <div id="fundTransactionList" class="fund-ledger"></div>
+      </section>
+
       <section class="card settlement-card">
         <div class="section-title"><h2>Công nợ cần thanh toán</h2><p>Nhấn “Đã trả” sau khi người gửi hoàn tất chuyển tiền.</p></div>
         <div id="settlementList" class="settlement-list"></div>
@@ -118,7 +137,7 @@
         <div class="section-title"><h2>Đối soát theo thành viên</h2><p>Ghi nhận thanh toán sẽ tự tính lại số còn nợ và số còn được nhận.</p></div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Thành viên</th><th class="align-right">Phải chịu</th><th class="align-right">Tạm ứng đã thu</th><th class="align-right">Đã ứng chi phí</th><th class="align-right">Đã chuyển</th><th class="align-right">Đã nhận</th><th class="align-right">Còn lại</th><th>Trạng thái</th></tr></thead>
+            <thead><tr><th>Thành viên</th><th class="align-right">Phải chịu</th><th class="align-right">Tổng tạm ứng</th><th class="align-right">Đã hoàn</th><th class="align-right">Còn lại tạm ứng</th><th class="align-right">Đã ứng cá nhân</th><th class="align-right">Đã chuyển</th><th class="align-right">Đã nhận</th><th class="align-right">Quyết toán</th><th>Trạng thái</th></tr></thead>
             <tbody id="summaryTableBody"></tbody>
           </table>
         </div>
@@ -127,10 +146,11 @@
       <section class="card tips">
         <div class="section-title"><h2>Cách tính</h2></div>
         <div class="tips__grid">
-          <p><strong>Tạm ứng đã thu</strong> — khoản thu trước cố định của từng thành viên, chỉ đổi khi sửa thành viên.</p>
-          <p><strong>Đã ứng chi phí</strong> — tiền người đó trực tiếp trả cho các khoản chi.</p>
+          <p><strong>Tổng tạm ứng</strong> = tạm ứng ban đầu + các lần nạp thêm vào quỹ.</p>
+          <p><strong>Còn lại tạm ứng</strong> = tiền đã nạp − tiền đã hoàn − phần chi từ quỹ của thành viên.</p>
+          <p><strong>Đã ứng cá nhân</strong> — tiền người đó tự trả ngoài quỹ.</p>
           <p><strong>Phải chịu</strong> — phần người đó thực tế sử dụng.</p>
-          <p><strong>Số dư chi phí</strong> = Đã ứng chi phí − Phải chịu, sau đó điều chỉnh theo các giao dịch đã thanh toán.</p>
+          <p><strong>Quyết toán</strong> tính cả tiền quỹ, chi cá nhân, tiền đã chuyển/nhận và trách nhiệm của người giữ quỹ.</p>
         </div>
       </section>
     </section>
@@ -140,10 +160,11 @@
       <section class="card">
         <div class="section-title"><h2 id="expenseFormTitle">Thêm khoản chi</h2><p>Chỉ cần 3 bước: nội dung, số tiền, ai tham gia.</p></div>
         <form id="expenseForm">
-          <div class="form-grid form-grid--3">
+          <div class="form-grid form-grid--4">
             <div class="field"><label for="expenseDescription">Nội dung <span>*</span></label><input id="expenseDescription" type="text" maxlength="120" placeholder="Ví dụ: Tiền phòng" /></div>
             <div class="field"><label for="expenseAmount">Tổng tiền <span>*</span></label><div class="money-input"><input id="expenseAmount" type="text" inputmode="numeric" placeholder="0" autocomplete="off" /><span>₫</span></div></div>
             <div class="field"><label for="expensePayer">Người trả <span>*</span></label><select id="expensePayer"></select></div>
+            <div class="field"><label for="expensePaymentSource">Nguồn thanh toán</label><select id="expensePaymentSource"><option value="personal">Cá nhân tự trả</option><option value="fund">Quỹ chuyến đi</option></select></div>
           </div>
 
           <fieldset class="fieldset">
@@ -196,9 +217,9 @@
           <input id="memberName" type="text" maxlength="40" placeholder="Tên thành viên" autocomplete="off" />
           <input id="memberEmail" type="email" maxlength="120" placeholder="Email Google (khuyến nghị)" autocomplete="off" />
           <div class="field member-advance-field">
-            <label for="memberPrepaidAmount">Tạm ứng đã thu <span>(cố định)</span></label>
+            <label for="memberPrepaidAmount">Tạm ứng ban đầu</label>
             <div class="money-input"><input id="memberPrepaidAmount" type="text" inputmode="numeric" placeholder="0" autocomplete="off" /><span>₫</span></div>
-            <small class="field-hint">Không tự thay đổi khi thêm chi phí hoặc ghi nhận thanh toán.</small>
+            <small class="field-hint">Các lần nạp thêm hoặc hoàn tiền được ghi ở Sổ quỹ trong tab Tổng quan.</small>
           </div>
           <div class="member-form__actions">
             <button id="btnCancelMemberEdit" class="btn btn--ghost hidden" type="button">Hủy sửa</button>
@@ -309,9 +330,9 @@
       });
     })();
   </script>
-  <script src="logic.js?v=16"></script>
-  <script src="report.js?v=16"></script>
-  <script src="dashboard.js?v=16"></script>
-  <script src="app.js?v=16"></script>
+  <script src="logic.js?v=17"></script>
+  <script src="report.js?v=17"></script>
+  <script src="dashboard.js?v=17"></script>
+  <script src="app.js?v=17"></script>
 </body>
 </html>

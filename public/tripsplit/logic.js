@@ -45,7 +45,55 @@
     return (Array.isArray(expenses) ? expenses : []).filter(isExpenseIncluded);
   }
 
-  function calculateSummary(members, expenses) {
+  function isFundExpense(expense) {
+    return Boolean(expense) && expense.paymentSource === "fund";
+  }
+
+  function calculateFundSummary(members, expenses, fundTransactions, fundKeeperId) {
+    const memberRows = Object.fromEntries((members || []).map((member) => [member.id, {
+      memberId: member.id,
+      openingAdvance: toSafeInteger(member.prepaidAmount),
+      extraDeposits: 0,
+      totalDeposited: toSafeInteger(member.prepaidAmount),
+      refunded: 0,
+      netContributed: toSafeInteger(member.prepaidAmount),
+      fundExpenseShare: 0,
+      remainingAdvance: 0,
+      advanceShortfall: 0,
+    }]));
+
+    (fundTransactions || []).forEach((transaction) => {
+      const row = memberRows[transaction?.memberId];
+      const amount = toSafeInteger(transaction?.amount);
+      if (!row || !amount) return;
+      if (transaction.type === "refund") row.refunded += amount;
+      else {
+        row.extraDeposits += amount;
+        row.totalDeposited += amount;
+      }
+    });
+
+    includedExpenses(expenses).filter(isFundExpense).forEach((expense) => {
+      Object.entries(getExpenseShares(expense)).forEach(([memberId, share]) => {
+        if (memberRows[memberId]) memberRows[memberId].fundExpenseShare += toSafeInteger(share);
+      });
+    });
+
+    Object.values(memberRows).forEach((row) => {
+      row.netContributed = Math.max(0, row.totalDeposited - row.refunded);
+      row.remainingAdvance = Math.max(0, row.netContributed - row.fundExpenseShare);
+      row.advanceShortfall = Math.max(0, row.fundExpenseShare - row.netContributed);
+    });
+
+    const totalDeposited = Object.values(memberRows).reduce((sum, row) => sum + row.totalDeposited, 0);
+    const totalRefunded = Object.values(memberRows).reduce((sum, row) => sum + row.refunded, 0);
+    const fundSpent = includedExpenses(expenses).filter(isFundExpense).reduce((sum, expense) => sum + toSafeInteger(expense.amount), 0);
+    const fundBalance = totalDeposited - totalRefunded - fundSpent;
+    return { memberRows, totalDeposited, totalRefunded, fundSpent, fundBalance, fundKeeperId: memberRows[fundKeeperId] ? fundKeeperId : "" };
+  }
+
+  function calculateSummary(members, expenses, fundTransactions, fundKeeperId) {
+    const fund = calculateFundSummary(members, expenses, fundTransactions, fundKeeperId);
     const summary = Object.fromEntries(
       (members || []).map((member) => [
         member.id,
@@ -54,15 +102,24 @@
           name: member.name,
           owed: 0,
           paid: 0,
-          prepaid: toSafeInteger(member.prepaidAmount),
+          fundPaid: 0,
+          prepaid: fund.memberRows[member.id].totalDeposited,
+          refunded: fund.memberRows[member.id].refunded,
+          netFundContribution: fund.memberRows[member.id].netContributed,
+          fundExpenseShare: fund.memberRows[member.id].fundExpenseShare,
+          remainingAdvance: fund.memberRows[member.id].remainingAdvance,
+          advanceShortfall: fund.memberRows[member.id].advanceShortfall,
+          fundHeld: 0,
           balance: 0,
         },
       ])
     );
 
     includedExpenses(expenses).forEach((expense) => {
-      if (summary[expense.payerId]) {
+      if (!isFundExpense(expense) && summary[expense.payerId]) {
         summary[expense.payerId].paid += toSafeInteger(expense.amount);
+      } else if (isFundExpense(expense) && summary[expense.payerId]) {
+        summary[expense.payerId].fundPaid += toSafeInteger(expense.amount);
       }
 
       const shares = getExpenseShares(expense);
@@ -74,14 +131,19 @@
     });
 
     Object.values(summary).forEach((row) => {
-      row.balance = row.paid - row.owed;
+      row.balance = row.paid + row.netFundContribution - row.owed;
     });
+
+    if (fund.fundKeeperId && summary[fund.fundKeeperId]) {
+      summary[fund.fundKeeperId].fundHeld = fund.fundBalance;
+      summary[fund.fundKeeperId].balance -= fund.fundBalance;
+    }
 
     return summary;
   }
 
-  function calculateOutstandingSummary(members, expenses, payments) {
-    const summary = calculateSummary(members, expenses);
+  function calculateOutstandingSummary(members, expenses, payments, fundTransactions, fundKeeperId) {
+    const summary = calculateSummary(members, expenses, fundTransactions, fundKeeperId);
     Object.values(summary).forEach((row) => {
       row.originalBalance = row.balance;
       row.transferred = 0;
@@ -104,8 +166,8 @@
     return summary;
   }
 
-  function calculateSettlements(members, expenses, payments) {
-    const summary = calculateOutstandingSummary(members, expenses, payments);
+  function calculateSettlements(members, expenses, payments, fundTransactions, fundKeeperId) {
+    const summary = calculateOutstandingSummary(members, expenses, payments, fundTransactions, fundKeeperId);
 
     const creditors = Object.values(summary)
       .filter((row) => row.balance > 0)
@@ -194,6 +256,9 @@
       if (expense.included !== undefined && typeof expense.included !== "boolean") {
         return { valid: false, message: `Khoản "${expense.description}" có trạng thái quyết toán không hợp lệ.` };
       }
+      if (expense.paymentSource !== undefined && !["personal", "fund"].includes(expense.paymentSource)) {
+        return { valid: false, message: `Khoản "${expense.description}" có nguồn thanh toán không hợp lệ.` };
+      }
       const splitMode = expense.splitMode || "equal";
       if (!["equal", "custom"].includes(splitMode)) {
         return { valid: false, message: `Khoản "${expense.description}" có cách chia không hợp lệ.` };
@@ -207,6 +272,30 @@
       }
     }
 
+    if (candidate.fundKeeperId && !memberIds.has(candidate.fundKeeperId)) {
+      return { valid: false, message: "Người giữ quỹ không tồn tại trong chuyến đi." };
+    }
+    const transactionIds = new Set();
+    const refundedByMember = {};
+    const depositedByMember = Object.fromEntries((candidate.members || []).map((member) => [member.id, toSafeInteger(member.prepaidAmount)]));
+    for (const transaction of candidate.fundTransactions || []) {
+      if (!transaction || typeof transaction.id !== "string" || transactionIds.has(transaction.id)) return { valid: false, message: "Giao dịch quỹ không hợp lệ hoặc bị trùng." };
+      if (!memberIds.has(transaction.memberId)) return { valid: false, message: "Giao dịch quỹ có thành viên không tồn tại." };
+      if (!Number.isSafeInteger(transaction.amount) || transaction.amount <= 0) return { valid: false, message: "Số tiền giao dịch quỹ không hợp lệ." };
+      if (!["deposit", "refund"].includes(transaction.type)) return { valid: false, message: "Loại giao dịch quỹ không hợp lệ." };
+      transactionIds.add(transaction.id);
+      if (transaction.type === "refund") refundedByMember[transaction.memberId] = (refundedByMember[transaction.memberId] || 0) + transaction.amount;
+      else depositedByMember[transaction.memberId] = (depositedByMember[transaction.memberId] || 0) + transaction.amount;
+    }
+    for (const memberId of memberIds) {
+      if ((refundedByMember[memberId] || 0) > (depositedByMember[memberId] || 0)) return { valid: false, message: "Tiền hoàn quỹ không thể lớn hơn tổng tiền thành viên đã nạp." };
+    }
+    const fundSnapshot = calculateFundSummary(candidate.members, candidate.expenses, candidate.fundTransactions, candidate.fundKeeperId);
+    for (const row of Object.values(fundSnapshot.memberRows)) {
+      if (row.refunded > Math.max(0, row.totalDeposited - row.fundExpenseShare)) return { valid: false, message: "Tiền hoàn quỹ vượt phần tạm ứng chưa sử dụng của thành viên." };
+    }
+    if (fundSnapshot.totalRefunded > 0 && fundSnapshot.fundBalance < 0) return { valid: false, message: "Không thể hoàn tiền khi quỹ không đủ số dư." };
+
     return { valid: true, message: "" };
   }
 
@@ -217,7 +306,7 @@
     if (typeof trip.name !== "string" || !trip.name.trim()) {
       return { valid: false, message: "Chuyến đi chưa có tên." };
     }
-    return validateState({ members: trip.members, expenses: trip.expenses });
+    return validateState({ members: trip.members, expenses: trip.expenses, fundTransactions: trip.fundTransactions, fundKeeperId: trip.fundKeeperId });
   }
 
   function validatePortfolio(candidate) {
@@ -273,6 +362,8 @@
     getExpenseShares,
     isExpenseIncluded,
     includedExpenses,
+    isFundExpense,
+    calculateFundSummary,
     calculateSummary,
     calculateOutstandingSummary,
     calculateSettlements,

@@ -26,7 +26,12 @@ test("ships the professional TripSplit workspace and account controls", async ()
   assert.match(html, /id="sheetStatus"/);
   assert.match(html, /id="btnOpenSheet"/);
   assert.match(html, /id="memberPrepaidAmount"/);
-  assert.match(html, /Tạm ứng đã thu/);
+  assert.match(html, /Tạm ứng ban đầu/);
+  assert.match(html, /id="fundKeeper"/);
+  assert.match(html, /id="fundTransactionForm"/);
+  assert.match(html, /id="fundBalance"/);
+  assert.match(html, /id="expensePaymentSource"/);
+  assert.match(html, /Còn lại tạm ứng/);
   assert.match(html, /id="btnPreviewPdf"/);
   assert.match(html, /id="pdfPreviewDialog"/);
   assert.match(html, /id="btnPrintPdf"/);
@@ -53,6 +58,8 @@ test("ships the professional TripSplit workspace and account controls", async ()
   assert.match(css, /\.pdf-report__stats/);
   assert.match(css, /\.home-trip-list/);
   assert.match(css, /\.expense-toggle/);
+  assert.match(css, /\.fund-kpis/);
+  assert.match(css, /\.fund-ledger/);
 });
 
 test("excludes planned expenses from settlement, dashboard, and report totals", async () => {
@@ -79,28 +86,40 @@ test("excludes planned expenses from settlement, dashboard, and report totals", 
   assert.equal(dashboard.expenseCount, 1);
 });
 
-test("keeps member advances fixed and separate from expense settlement", async () => {
+test("integrates advances, top-ups, fund spending, and refunds into settlement", async () => {
   await import(new URL("public/tripsplit/logic.js", root));
   const Logic = globalThis.TravelExpenseLogic;
-  const members = [
-    { id: "an", name: "An", prepaidAmount: 800_000 },
-    { id: "binh", name: "Bình", prepaidAmount: 200_000 },
-  ];
+  const members = Array.from({ length: 7 }, (_, index) => ({ id: `m${index + 1}`, name: `Thành viên ${index + 1}`, prepaidAmount: 1_000_000 }));
+  const extraTopUps = Logic.splitEqual(5_000_000, members.map((member) => member.id));
+  const fundTransactions = members.map((member) => ({ id: `fund-${member.id}`, memberId: member.id, type: "deposit", amount: extraTopUps[member.id], occurredAt: "2026-08-18T10:00:00.000Z" }));
   const expenses = [{
     id: "expense-1",
-    description: "Tiền phòng",
-    amount: 1_000_000,
-    payerId: "an",
-    participantIds: ["an", "binh"],
+    description: "Tổng chi phí Đà Lạt",
+    amount: 10_000_000,
+    payerId: "m1",
+    paymentSource: "fund",
+    participantIds: members.map((member) => member.id),
     splitMode: "equal",
   }];
 
-  const summary = Logic.calculateOutstandingSummary(members, expenses, []);
-  assert.equal(summary.an.prepaid, 800_000);
-  assert.equal(summary.binh.prepaid, 200_000);
-  assert.equal(summary.an.balance, 500_000);
-  assert.equal(summary.binh.balance, -500_000);
-  assert.equal(Logic.validateState({ members, expenses }).valid, true);
+  const fund = Logic.calculateFundSummary(members, expenses, fundTransactions, "m1");
+  assert.equal(fund.totalDeposited, 12_000_000);
+  assert.equal(fund.fundSpent, 10_000_000);
+  assert.equal(fund.fundBalance, 2_000_000);
+  assert.equal(Object.values(fund.memberRows).reduce((sum, row) => sum + row.remainingAdvance, 0), 2_000_000);
+  assert.ok(Object.values(fund.memberRows).every((row) => row.remainingAdvance >= 285_714 && row.remainingAdvance <= 285_715));
+
+  const summary = Logic.calculateOutstandingSummary(members, expenses, [], fundTransactions, "m1");
+  assert.equal(Object.values(summary).reduce((sum, row) => sum + row.balance, 0), 0);
+  assert.equal(Logic.calculateSettlements(members, expenses, [], fundTransactions, "m1").reduce((sum, item) => sum + item.amount, 0), 1_714_286);
+  assert.equal(Logic.validateState({ members, expenses, fundTransactions, fundKeeperId: "m1" }).valid, true);
+
+  const withRefund = [...fundTransactions, { id: "refund-m1", memberId: "m1", type: "refund", amount: 285_714, occurredAt: "2026-08-18T18:00:00.000Z" }];
+  const afterRefund = Logic.calculateFundSummary(members, expenses, withRefund, "m1");
+  assert.equal(afterRefund.totalRefunded, 285_714);
+  assert.equal(afterRefund.fundBalance, 1_714_286);
+  assert.equal(afterRefund.memberRows.m1.remainingAdvance, 0);
+  assert.equal(Logic.validateState({ members, expenses, fundTransactions: [...fundTransactions, { id: "bad-refund", memberId: "m1", type: "refund", amount: 285_715 }], fundKeeperId: "m1" }).valid, false);
 });
 
 test("checks and synchronizes Google Sheet through the protected bridge", async () => {
@@ -121,7 +140,8 @@ test("checks and synchronizes Google Sheet through the protected bridge", async 
   assert.match(script, /responseMode === 'json'/);
   assert.match(script, /failedEmails/);
   assert.match(script, /writeAdvances_/);
-  assert.match(script, /Tạm ứng đã thu/);
+  assert.match(script, /SỔ QUỸ CHUYẾN ĐI/);
+  assert.match(script, /Còn lại tạm ứng/);
 });
 
 test("builds safe, deduplicated share targets", async () => {
