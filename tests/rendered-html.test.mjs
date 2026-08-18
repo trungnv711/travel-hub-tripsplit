@@ -31,6 +31,8 @@ test("ships the professional TripSplit workspace and account controls", async ()
   assert.match(html, /id="fundTransactionForm"/);
   assert.match(html, /id="fundBalance"/);
   assert.match(html, /id="expensePaymentSource"/);
+  assert.match(html, /id="payerList"/);
+  assert.match(html, /id="payerSplitPreview"/);
   assert.match(html, /Còn lại tạm ứng/);
   assert.match(html, /id="btnPreviewPdf"/);
   assert.match(html, /id="pdfPreviewDialog"/);
@@ -60,6 +62,48 @@ test("ships the professional TripSplit workspace and account controls", async ()
   assert.match(css, /\.expense-toggle/);
   assert.match(css, /\.fund-kpis/);
   assert.match(css, /\.fund-ledger/);
+});
+
+test("supports multiple personal payers while keeping the full trip expense total", async () => {
+  await import(new URL("public/tripsplit/logic.js", root));
+  await import(new URL("public/tripsplit/report.js", root));
+  await import(new URL("public/tripsplit/dashboard.js", root));
+  const Logic = globalThis.TravelExpenseLogic;
+  const Report = globalThis.TravelExpenseReport;
+  const Dashboard = globalThis.TravelDashboard;
+  const members = ["Trung", "Ngân", "Trâm", "Duy"].map((name, index) => ({ id: `m${index + 1}`, name }));
+  const payerIds = members.map((member) => member.id);
+  const expense = {
+    id: "car-1",
+    description: "Tiền xe đi Bảo Lộc",
+    amount: 1_240_000,
+    payerId: "m1",
+    payerIds,
+    payerShares: Logic.splitEqual(1_240_000, payerIds),
+    paymentSource: "personal",
+    participantIds: payerIds,
+    splitMode: "equal",
+    included: true,
+    date: "2026-08-18",
+  };
+  const trip = { id: "trip-car", name: "Bảo Lộc", members, expenses: [expense], payments: [], fundTransactions: [] };
+
+  assert.deepEqual(Logic.getExpensePayerShares(expense), { m1: 310_000, m2: 310_000, m3: 310_000, m4: 310_000 });
+  const summary = Logic.calculateSummary(members, [expense]);
+  members.forEach((member) => {
+    assert.equal(summary[member.id].paid, 310_000);
+    assert.equal(summary[member.id].owed, 310_000);
+    assert.equal(summary[member.id].balance, 0);
+  });
+  assert.equal(Report.buildModel(trip, Logic).totalExpense, 1_240_000);
+  const dashboard = Dashboard.aggregate({ trips: [trip] }, Logic, "all", new Date("2026-08-18"));
+  assert.equal(dashboard.total, 1_240_000);
+  assert.equal(dashboard.expenseCount, 1);
+  assert.deepEqual(dashboard.payers.map((payer) => payer.amount), [310_000, 310_000, 310_000, 310_000]);
+  assert.equal(Logic.validateState({ members, expenses: [expense], fundTransactions: [] }).valid, true);
+
+  const legacyExpense = { ...expense, payerIds: undefined, payerShares: undefined, payerId: "m1" };
+  assert.deepEqual(Logic.getExpensePayerShares(legacyExpense), { m1: 1_240_000 });
 });
 
 test("excludes planned expenses from settlement, dashboard, and report totals", async () => {

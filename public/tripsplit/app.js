@@ -14,7 +14,7 @@
   const dom = Object.fromEntries([
     "tripSelect", "tripStatus", "tripTitle", "tripMeta", "saveStatus", "memberForm", "memberName",
     "memberEmail", "memberPrepaidAmount", "memberError", "memberList", "btnSaveMember", "btnCancelMemberEdit", "appsScriptUrl", "appsScriptSecret", "btnGenerateSecret", "btnCheckAppsScript", "btnShareSheet", "btnOpenSheet", "sheetStatus", "sheetStatusTitle", "sheetStatusText", "sheetError",
-    "expenseForm", "expenseFormTitle", "expenseDescription", "expenseAmount", "expensePayer", "expensePaymentSource",
+    "expenseForm", "expenseFormTitle", "expenseDescription", "expenseAmount", "expensePaymentSource", "payerFieldset", "payerList", "payerSplitPreview", "btnSelectAllPayers", "btnClearPayers",
     "expenseDate", "expenseCategory", "expenseNote", "participantList", "customShares",
     "equalSplitPreview", "expenseError", "btnCancelEdit", "btnSaveExpense", "expenseTableBody",
     "expenseEmpty", "expenseSearch", "summaryTableBody", "settlementList", "paymentHistoryList", "statTotal",
@@ -70,6 +70,8 @@
   function escapeHtml(value) { return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;"); }
   function validEmail(value) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim()); }
   function memberName(id) { return activeTrip().members.find((member) => member.id === id)?.name || "Không xác định"; }
+  function expensePayerNames(expense) { return Logic.getExpensePayerIds(expense).map(memberName); }
+  function expensePayerDetails(expense) { return Object.entries(Logic.getExpensePayerShares(expense)).map(([id, amount]) => `${memberName(id)}: ${formatCurrency(amount)}`); }
   function averagePerParticipant(expense) { const count = new Set(expense.participantIds || []).size; return count ? Math.round((Number(expense.amount) || 0) / count) : 0; }
   function statusLabel(status) { return ({ planning: "Đang chuẩn bị", active: "Đang diễn ra", settling: "Đang quyết toán", closed: "Đã kết thúc" })[status] || "Đang chuẩn bị"; }
   function formatDateRange(trip) {
@@ -82,31 +84,41 @@
     return { id, name, destination, startDate, endDate, status, members, expenses, payments, fundKeeperId: fundKeeperId || members[0]?.id || "", fundTransactions, createdAt: now(), updatedAt: now() };
   }
 
+  function normalizeExpense(expense) {
+    expense.included = expense.included !== false;
+    expense.paymentSource = expense.paymentSource === "fund" ? "fund" : "personal";
+    const payerIds = Logic.getExpensePayerIds(expense);
+    expense.payerId = payerIds[0] || expense.payerId || "";
+    expense.payerIds = payerIds;
+    expense.payerShares = Logic.getExpensePayerShares(expense);
+    return expense;
+  }
+
   function createSamplePortfolio() {
     const people = (prefix, names) => names.map((name, index) => ({ id: `${prefix}_m${index + 1}`, name, email: "", prepaidAmount: 0 }));
     const dalatMembers = people("dl", ["An", "Bình", "Chi", "Dũng", "Giang", "Hà", "Khang", "Lan", "Minh", "Ngọc"]);
     const baolocMembers = people("bl", ["An", "Bình", "Chi", "Dũng", "Hà", "Lan", "Minh", "Phúc"]);
-    const expense = (id, description, amount, payerId, participantIds, category, date) => ({ id, description, amount, payerId, participantIds, splitMode: "equal", customShares: {}, category, date, note: "", included: true, paymentSource: "personal", createdAt: now() });
+    const expense = (id, description, amount, payerId, participantIds, category, date) => ({ id, description, amount, payerId, payerIds: [payerId], payerShares: { [payerId]: amount }, participantIds, splitMode: "equal", customShares: {}, category, date, note: "", included: true, paymentSource: "personal", createdAt: now() });
     const dalat = makeTrip({ id: "trip_da_lat", name: "Trip 1 — Đà Lạt", destination: "Đà Lạt", startDate: "2026-08-15", endDate: "2026-08-17", status: "planning", members: dalatMembers });
     dalat.expenses = [expense("dl_e1", "Đặt cọc villa", 6000000, dalatMembers[0].id, dalatMembers.map((m) => m.id), "Lưu trú", "2026-08-01")];
     const baoloc = makeTrip({ id: "trip_bao_loc", name: "Trip 2 — Bảo Lộc", destination: "Bảo Lộc", startDate: "2026-09-05", endDate: "2026-09-06", status: "planning", members: baolocMembers });
     baoloc.expenses = [expense("bl_e1", "Đặt xe khứ hồi", 3200000, baolocMembers[1].id, baolocMembers.map((m) => m.id), "Di chuyển", "2026-08-03")];
-    return { version: 4, activeTripId: dalat.id, trips: [dalat, baoloc] };
+    return { version: 5, activeTripId: dalat.id, trips: [dalat, baoloc] };
   }
 
   function migrateLegacy(legacy) {
     const trip = makeTrip({ name: String(legacy.tripName || "Chuyến đi đã nhập"), members: legacy.members.map((m) => ({ ...m, email: m.email || "", prepaidAmount: Logic.toSafeInteger(m.prepaidAmount) })), expenses: legacy.expenses.map((expense) => ({ ...expense, included: expense.included !== false })) });
-    return normalizePortfolio({ version: 4, activeTripId: trip.id, trips: [trip] });
+    return normalizePortfolio({ version: 5, activeTripId: trip.id, trips: [trip] });
   }
 
   function normalizePortfolio(candidate) {
-    candidate.version = 4;
+    candidate.version = 5;
     candidate.trips.forEach((trip) => {
       trip.destination ||= ""; trip.startDate ||= ""; trip.endDate ||= ""; trip.status ||= "planning";
       trip.payments ||= [];
       trip.fundTransactions = Array.isArray(trip.fundTransactions) ? trip.fundTransactions : [];
       trip.members.forEach((member) => { member.email ||= ""; member.prepaidAmount = Logic.toSafeInteger(member.prepaidAmount); });
-      trip.expenses.forEach((expense) => { expense.included = expense.included !== false; expense.paymentSource = expense.paymentSource === "fund" ? "fund" : "personal"; });
+      trip.expenses.forEach(normalizeExpense);
       if (!trip.members.some((member) => member.id === trip.fundKeeperId)) trip.fundKeeperId = trip.members[0]?.id || "";
     });
     return candidate;
@@ -202,7 +214,7 @@
         trip.payments ||= [];
         trip.fundTransactions = Array.isArray(trip.fundTransactions) ? trip.fundTransactions : [];
         trip.members.forEach((member) => { member.email ||= ""; member.prepaidAmount = Logic.toSafeInteger(member.prepaidAmount); });
-        trip.expenses.forEach((expense) => { expense.included = expense.included !== false; expense.paymentSource = expense.paymentSource === "fund" ? "fund" : "personal"; });
+        trip.expenses.forEach(normalizeExpense);
         if (!trip.members.some((member) => member.id === trip.fundKeeperId)) trip.fundKeeperId = trip.members[0]?.id || "";
         const index = portfolio.trips.findIndex((item) => item.shareId === trip.shareId || item.id === trip.id);
         if (index >= 0) portfolio.trips[index] = trip;
@@ -376,7 +388,7 @@
       if (!Logic.validateTrip(result.trip).valid) throw new Error("Dữ liệu chuyến đi trên máy chủ không hợp lệ.");
       const sharedTrip = { ...result.trip, payments: Array.isArray(result.trip.payments) ? result.trip.payments : [], fundTransactions: Array.isArray(result.trip.fundTransactions) ? result.trip.fundTransactions : [], shareId, shareRevision: result.revision };
       sharedTrip.members.forEach((member) => { member.email ||= ""; member.prepaidAmount = Logic.toSafeInteger(member.prepaidAmount); });
-      sharedTrip.expenses.forEach((expense) => { expense.included = expense.included !== false; expense.paymentSource = expense.paymentSource === "fund" ? "fund" : "personal"; });
+      sharedTrip.expenses.forEach(normalizeExpense);
       if (!sharedTrip.members.some((member) => member.id === sharedTrip.fundKeeperId)) sharedTrip.fundKeeperId = sharedTrip.members[0]?.id || "";
       sharedTrip.expenses.forEach((expense) => { expense.included = expense.included !== false; });
       isApplyingSharedTrip = true;
@@ -453,30 +465,56 @@
   function renderMembers() {
     const trip = activeTrip();
     dom.memberList.innerHTML = trip.members.length ? trip.members.map((member) => {
-      const inUse = trip.expenses.some((expense) => expense.payerId === member.id || expense.participantIds.includes(member.id)) || trip.fundTransactions.some((transaction) => transaction.memberId === member.id) || trip.fundKeeperId === member.id;
+      const inUse = trip.expenses.some((expense) => Logic.getExpensePayerIds(expense).includes(member.id) || expense.participantIds.includes(member.id)) || trip.fundTransactions.some((transaction) => transaction.memberId === member.id) || trip.fundKeeperId === member.id;
       const fund = Logic.calculateFundSummary(trip.members, trip.expenses, trip.fundTransactions, trip.fundKeeperId).memberRows[member.id];
       return `<div class="member-item ${editingMemberId === member.id ? "member-item--editing" : ""}"><div><strong>${escapeHtml(member.name)}${trip.fundKeeperId === member.id ? ' <span class="keeper-badge">Giữ quỹ</span>' : ""}</strong><small class="${member.email ? "" : "missing-email"}">${escapeHtml(member.email || "Chưa có email · vẫn dùng được")}</small><small class="member-prepaid">Tổng tạm ứng: <strong>${formatCurrency(fund.totalDeposited)}</strong> · Còn lại: <strong>${formatCurrency(fund.remainingAdvance)}</strong></small></div><div class="member-item__actions"><button class="icon-button" type="button" data-edit-member="${escapeHtml(member.id)}" title="Sửa tên, email hoặc tạm ứng ban đầu" aria-label="Sửa ${escapeHtml(member.name)}">✎</button><button class="icon-button icon-button--danger" type="button" data-remove-member="${escapeHtml(member.id)}" ${inUse ? "disabled" : ""} title="${inUse ? "Đang có dữ liệu chi phí hoặc quỹ" : "Xóa thành viên"}" aria-label="Xóa ${escapeHtml(member.name)}">✕</button></div></div>`;
     }).join("") : '<div class="empty-state">Chưa có thành viên.</div>';
   }
 
   function renderPayerOptions() {
-    const selected = dom.expensePayer.value;
     const members = activeTrip().members;
-    dom.expensePayer.innerHTML = members.length ? members.map((m) => `<option value="${escapeHtml(m.id)}">${escapeHtml(m.name)}</option>`).join("") : '<option value="">Hãy thêm thành viên</option>';
-    if (members.some((m) => m.id === selected)) dom.expensePayer.value = selected;
     const options = members.length ? members.map((m) => `<option value="${escapeHtml(m.id)}">${escapeHtml(m.name)}</option>`).join("") : '<option value="">Hãy thêm thành viên</option>';
     dom.fundKeeper.innerHTML = options;
     dom.fundTransactionMember.innerHTML = options;
     dom.fundKeeper.value = members.some((member) => member.id === activeTrip().fundKeeperId) ? activeTrip().fundKeeperId : (members[0]?.id || "");
-    updateExpensePaymentSource();
+    renderPayers();
+  }
+
+  function selectedPayerIds() { return $$('input[name="payer"]:checked').map((input) => input.value); }
+
+  function updatePayerPreview() {
+    const fromFund = dom.expensePaymentSource.value === "fund";
+    const ids = selectedPayerIds();
+    const amount = parseMoney(dom.expenseAmount.value);
+    if (fromFund) {
+      dom.payerSplitPreview.textContent = ids.length ? `Thanh toán từ quỹ do ${memberName(ids[0])} giữ.` : "Hãy chọn người giữ quỹ ở tab Tổng quan.";
+      return;
+    }
+    if (!ids.length) { dom.payerSplitPreview.textContent = "Chọn ít nhất một người đã trực tiếp thanh toán."; return; }
+    if (!amount) { dom.payerSplitPreview.textContent = `${ids.length} người cùng trả · nhập tổng tiền để xem số tiền mỗi người.`; return; }
+    const shares = Object.values(Logic.splitEqual(amount, ids));
+    const min = Math.min(...shares), max = Math.max(...shares);
+    dom.payerSplitPreview.textContent = min === max
+      ? `${ids.length} người cùng trả · mỗi người ${formatCurrency(min)} · tổng vẫn là ${formatCurrency(amount)}.`
+      : `${ids.length} người cùng trả · khoảng ${formatCurrency(min)}–${formatCurrency(max)} mỗi người · tổng ${formatCurrency(amount)}.`;
+  }
+
+  function renderPayers(selectedIds) {
+    const trip = activeTrip();
+    const fromFund = dom.expensePaymentSource.value === "fund";
+    const keeperId = activeTrip().fundKeeperId;
+    const existing = selectedIds || selectedPayerIds().filter((id) => trip.members.some((member) => member.id === id));
+    const selected = new Set(fromFund ? (keeperId ? [keeperId] : []) : existing);
+    if (!fromFund && !selected.size && !editingExpenseId && trip.members[0]) selected.add(trip.members[0].id);
+    dom.payerList.innerHTML = trip.members.length ? trip.members.map((member) => `<label class="check-card"><input type="checkbox" name="payer" value="${escapeHtml(member.id)}" ${selected.has(member.id) ? "checked" : ""} ${fromFund ? "disabled" : ""}/><span>${escapeHtml(member.name)}</span></label>`).join("") : '<div class="empty-state">Hãy thêm thành viên trước.</div>';
+    dom.payerFieldset.classList.toggle("fieldset--readonly", fromFund);
+    dom.btnSelectAllPayers.classList.toggle("hidden", fromFund);
+    dom.btnClearPayers.classList.toggle("hidden", fromFund);
+    updatePayerPreview();
   }
 
   function updateExpensePaymentSource() {
-    const fromFund = dom.expensePaymentSource.value === "fund";
-    const keeperId = activeTrip().fundKeeperId;
-    if (fromFund && keeperId) dom.expensePayer.value = keeperId;
-    dom.expensePayer.disabled = fromFund;
-    dom.expensePayer.closest(".field")?.classList.toggle("field--readonly", fromFund);
+    renderPayers();
   }
 
   function renderFund() {
@@ -503,7 +541,7 @@
     const keyword = dom.expenseSearch.value.trim().toLocaleLowerCase("vi");
     const expenses = activeTrip().expenses.filter((e) => `${e.description} ${e.category || ""} ${e.note || ""} ${Logic.isExpenseIncluded(e) ? "đang tính" : "kế hoạch"} ${Logic.isFundExpense(e) ? "quỹ" : "cá nhân"}`.toLocaleLowerCase("vi").includes(keyword));
     dom.expenseEmpty.classList.toggle("hidden", !!expenses.length);
-    dom.expenseTableBody.innerHTML = expenses.map((e) => { const included = Logic.isExpenseIncluded(e); const source = Logic.isFundExpense(e) ? "Quỹ chuyến đi" : "Cá nhân tự trả"; return `<tr class="${included ? "" : "expense-row--planned"}"><td><label class="expense-toggle"><input type="checkbox" role="switch" data-toggle-expense="${escapeHtml(e.id)}" ${included ? "checked" : ""} aria-label="${included ? "Đang tính" : "Chưa tính"} khoản ${escapeHtml(e.description)}"><span aria-hidden="true"></span><small>${included ? "Đang tính" : "Kế hoạch"}</small></label></td><td><div class="expense-main">${escapeHtml(e.description)}</div><div class="expense-sub">${escapeHtml(e.category || "Khác")}${e.note ? ` · ${escapeHtml(e.note)}` : ""}</div></td><td>${escapeHtml(formatExpenseDateTime(e.date))}</td><td><strong>${escapeHtml(memberName(e.payerId))}</strong><div class="expense-source ${Logic.isFundExpense(e) ? "expense-source--fund" : ""}">${escapeHtml(source)}</div></td><td><div class="pill-group">${e.participantIds.map((id) => `<span class="pill">${escapeHtml(memberName(id))}</span>`).join("")}</div></td><td class="align-right amount">${formatCurrency(e.amount)}</td><td class="align-right per-person"><strong>${formatCurrency(averagePerParticipant(e))}</strong><small>${e.participantIds.length} người</small></td><td><div class="row-actions"><button class="icon-button" type="button" data-edit-expense="${escapeHtml(e.id)}" title="Sửa">✎</button><button class="icon-button icon-button--danger" type="button" data-delete-expense="${escapeHtml(e.id)}" title="Xóa">🗑</button></div></td></tr>`; }).join("");
+    dom.expenseTableBody.innerHTML = expenses.map((e) => { const included = Logic.isExpenseIncluded(e); const source = Logic.isFundExpense(e) ? "Quỹ chuyến đi" : "Cá nhân tự trả"; const payerNames = expensePayerNames(e); const payerDetails = expensePayerDetails(e); return `<tr class="${included ? "" : "expense-row--planned"}"><td><label class="expense-toggle"><input type="checkbox" role="switch" data-toggle-expense="${escapeHtml(e.id)}" ${included ? "checked" : ""} aria-label="${included ? "Đang tính" : "Chưa tính"} khoản ${escapeHtml(e.description)}"><span aria-hidden="true"></span><small>${included ? "Đang tính" : "Kế hoạch"}</small></label></td><td><div class="expense-main">${escapeHtml(e.description)}</div><div class="expense-sub">${escapeHtml(e.category || "Khác")}${e.note ? ` · ${escapeHtml(e.note)}` : ""}</div></td><td>${escapeHtml(formatExpenseDateTime(e.date))}</td><td><strong>${escapeHtml(payerNames.join(", "))}</strong><div class="expense-source ${Logic.isFundExpense(e) ? "expense-source--fund" : ""}">${escapeHtml(source)}</div>${payerDetails.length > 1 ? `<small class="expense-payer-detail">${escapeHtml(payerDetails.join(" · "))}</small>` : ""}</td><td><div class="pill-group">${e.participantIds.map((id) => `<span class="pill">${escapeHtml(memberName(id))}</span>`).join("")}</div></td><td class="align-right amount">${formatCurrency(e.amount)}</td><td class="align-right per-person"><strong>${formatCurrency(averagePerParticipant(e))}</strong><small>${e.participantIds.length} người</small></td><td><div class="row-actions"><button class="icon-button" type="button" data-edit-expense="${escapeHtml(e.id)}" title="Sửa">✎</button><button class="icon-button icon-button--danger" type="button" data-delete-expense="${escapeHtml(e.id)}" title="Xóa">🗑</button></div></td></tr>`; }).join("");
   }
 
   function setExpenseIncluded(id, included) {
@@ -598,20 +636,23 @@
   function resetExpenseForm() {
     editingExpenseId = null; dom.expenseForm.reset(); dom.expenseDate.value = localDateString(); dom.expenseCategory.value = "Ăn uống";
     dom.expenseFormTitle.textContent = "Thêm khoản chi"; dom.btnSaveExpense.textContent = "Lưu khoản chi"; dom.btnCancelEdit.classList.add("hidden"); dom.expenseError.textContent = "";
-    renderPayerOptions(); dom.expensePaymentSource.value = "personal"; updateExpensePaymentSource(); renderParticipants(activeTrip().members.map((m) => m.id)); updateSplitEditor();
+    dom.expensePaymentSource.value = "personal"; renderPayerOptions(); renderPayers(activeTrip().members[0] ? [activeTrip().members[0].id] : []); renderParticipants(activeTrip().members.map((m) => m.id)); updateSplitEditor();
   }
   function beginEditExpense(id) {
     const e = activeTrip().expenses.find((item) => item.id === id); if (!e) return;
     editingExpenseId = id; dom.expenseFormTitle.textContent = "Sửa khoản chi"; dom.btnSaveExpense.textContent = "Cập nhật"; dom.btnCancelEdit.classList.remove("hidden");
-    dom.expenseDescription.value = e.description; dom.expenseAmount.value = formatNumber(e.amount); dom.expensePaymentSource.value = Logic.isFundExpense(e) ? "fund" : "personal"; dom.expensePayer.value = e.payerId; updateExpensePaymentSource(); dom.expenseDate.value = expenseDateInput(e.date); dom.expenseCategory.value = e.category || "Khác"; dom.expenseNote.value = e.note || "";
+    dom.expenseDescription.value = e.description; dom.expenseAmount.value = formatNumber(e.amount); dom.expensePaymentSource.value = Logic.isFundExpense(e) ? "fund" : "personal"; renderPayers(Logic.getExpensePayerIds(e)); dom.expenseDate.value = expenseDateInput(e.date); dom.expenseCategory.value = e.category || "Khác"; dom.expenseNote.value = e.note || "";
     $(`input[name="splitMode"][value="${e.splitMode || "equal"}"]`).checked = true; renderParticipants(e.participantIds); updateSplitEditor();
     if (e.splitMode === "custom") Object.entries(e.customShares || {}).forEach(([id2, value]) => { const input = $(`#customShares input[data-share-member="${CSS.escape(id2)}"]`); if (input) input.value = Number(value) > 0 ? formatNumber(value) : ""; });
     updateCustomSuggestions(); dom.expenseForm.scrollIntoView({ behavior: "smooth", block: "start" });
   }
   function validateExpense() {
-    const data = { description: dom.expenseDescription.value.trim(), amount: parseMoney(dom.expenseAmount.value), payerId: dom.expensePayer.value, paymentSource: dom.expensePaymentSource.value === "fund" ? "fund" : "personal", participantIds: selectedParticipantIds(), splitMode: selectedSplitMode(), customShares: {}, date: dom.expenseDate.value, category: dom.expenseCategory.value, note: dom.expenseNote.value.trim() };
+    const paymentSource = dom.expensePaymentSource.value === "fund" ? "fund" : "personal";
+    const payerIds = paymentSource === "fund" ? (activeTrip().fundKeeperId ? [activeTrip().fundKeeperId] : []) : selectedPayerIds();
+    const data = { description: dom.expenseDescription.value.trim(), amount: parseMoney(dom.expenseAmount.value), payerId: payerIds[0] || "", payerIds, payerShares: {}, paymentSource, participantIds: selectedParticipantIds(), splitMode: selectedSplitMode(), customShares: {}, date: dom.expenseDate.value, category: dom.expenseCategory.value, note: dom.expenseNote.value.trim() };
     if (!data.description) return { message: "Vui lòng nhập nội dung khoản chi." }; if (!data.amount) return { message: "Tổng tiền phải lớn hơn 0." };
-    if (!activeTrip().members.some((m) => m.id === data.payerId)) return { message: data.paymentSource === "fund" ? "Hãy chọn người giữ quỹ trước." : "Vui lòng chọn người trả." }; if (!data.participantIds.length) return { message: "Chọn ít nhất một người tham gia." };
+    if (!data.payerIds.length || data.payerIds.some((id) => !activeTrip().members.some((member) => member.id === id))) return { message: data.paymentSource === "fund" ? "Hãy chọn người giữ quỹ trước." : "Chọn ít nhất một người trực tiếp trả." }; if (!data.participantIds.length) return { message: "Chọn ít nhất một người tham gia." };
+    data.payerShares = Logic.splitEqual(data.amount, data.payerIds);
     if (data.splitMode === "custom") {
       const plan = getCustomSharePlan();
       if (plan.invalidEntries.length) return { message: "Chỉ nhập số tiền hoặc tỷ lệ từ 0% đến 100%." };
@@ -679,7 +720,7 @@
   }
   function removeMember(id) {
     const trip = activeTrip(), member = trip.members.find((m) => m.id === id); if (!member) return;
-    if (trip.expenses.some((e) => e.payerId === id || e.participantIds.includes(id)) || trip.fundTransactions.some((transaction) => transaction.memberId === id) || trip.fundKeeperId === id) { showToast("Không thể xóa thành viên đang có dữ liệu chi phí hoặc quỹ."); return; }
+    if (trip.expenses.some((e) => Logic.getExpensePayerIds(e).includes(id) || e.participantIds.includes(id)) || trip.fundTransactions.some((transaction) => transaction.memberId === id) || trip.fundKeeperId === id) { showToast("Không thể xóa thành viên đang có dữ liệu chi phí hoặc quỹ."); return; }
     trip.members = trip.members.filter((m) => m.id !== id); if (editingMemberId === id) resetMemberForm(); savePortfolio(); render();
   }
 
@@ -719,7 +760,7 @@
   function buildSheetPayload() {
     const trip = activeTrip(), fund = Logic.calculateFundSummary(trip.members, trip.expenses, trip.fundTransactions, trip.fundKeeperId), summary = Logic.calculateOutstandingSummary(trip.members, trip.expenses, trip.payments, trip.fundTransactions, trip.fundKeeperId), settlements = Logic.calculateSettlements(trip.members, trip.expenses, trip.payments, trip.fundTransactions, trip.fundKeeperId);
     const payments = trip.payments.map((payment) => ({ ...payment, fromName: memberName(payment.fromId), toName: memberName(payment.toId) }));
-    return { version: 4, trip: { id: trip.id, name: trip.name, destination: trip.destination, startDate: trip.startDate, endDate: trip.endDate, status: statusLabel(trip.status), members: trip.members, fundKeeperId: trip.fundKeeperId, fundKeeperName: memberName(trip.fundKeeperId), fundTransactions: trip.fundTransactions.map((item) => ({ ...item, memberName: memberName(item.memberId) })), expenses: trip.expenses.map((e) => ({ ...e, included: Logic.isExpenseIncluded(e), paymentSource: Logic.isFundExpense(e) ? "fund" : "personal", paymentSourceLabel: Logic.isFundExpense(e) ? "Quỹ chuyến đi" : "Cá nhân tự trả", averagePerPerson: averagePerParticipant(e), payerName: memberName(e.payerId), participantNames: e.participantIds.map(memberName), shares: Logic.getExpenseShares(e) })) }, fund, summary: trip.members.map((m) => ({ ...summary[m.id], email: m.email || "" })), settlements, payments, generatedAt: now() };
+    return { version: 5, trip: { id: trip.id, name: trip.name, destination: trip.destination, startDate: trip.startDate, endDate: trip.endDate, status: statusLabel(trip.status), members: trip.members, fundKeeperId: trip.fundKeeperId, fundKeeperName: memberName(trip.fundKeeperId), fundTransactions: trip.fundTransactions.map((item) => ({ ...item, memberName: memberName(item.memberId) })), expenses: trip.expenses.map((e) => ({ ...e, included: Logic.isExpenseIncluded(e), paymentSource: Logic.isFundExpense(e) ? "fund" : "personal", paymentSourceLabel: Logic.isFundExpense(e) ? "Quỹ chuyến đi" : "Cá nhân tự trả", averagePerPerson: averagePerParticipant(e), payerName: expensePayerDetails(e).join("; "), payerNames: expensePayerNames(e), participantNames: e.participantIds.map(memberName), shares: Logic.getExpenseShares(e), payerShares: Logic.getExpensePayerShares(e) })) }, fund, summary: trip.members.map((m) => ({ ...summary[m.id], email: m.email || "" })), settlements, payments, generatedAt: now() };
   }
   function exportCsv() {
     const payload = buildSheetPayload(), rows = [["CHUYẾN ĐI", payload.trip.name], ["Điểm đến", payload.trip.destination], ["Thời gian", formatDateRange(activeTrip())], ["Người giữ quỹ", payload.trip.fundKeeperName], ["Tổng đã nạp", payload.fund.totalDeposited], ["Chi từ quỹ", payload.fund.fundSpent], ["Đã hoàn", payload.fund.totalRefunded], ["Quỹ còn lại", payload.fund.fundBalance], [], ["CHI PHÍ"], ["Quyết toán", "Nội dung", "Ngày & giờ", "Nhóm", "Nguồn tiền", "Tổng tiền", "Tổng tiền/người", "Người trả/giữ quỹ", "Người tham gia", "Cách chia", "Ghi chú"]];
@@ -748,8 +789,8 @@
       return `<tr><td><strong>${escapeHtml(member.name)}</strong>${member.email ? `<br><small>${escapeHtml(member.email)}</small>` : ""}</td><td class="num">${formatCurrency(row.prepaid)}</td><td class="num">${formatCurrency(row.refunded)}</td><td class="num">${formatCurrency(row.remainingAdvance)}</td><td class="num">${formatCurrency(row.owed)}</td><td class="num">${formatCurrency(row.paid)}</td><td class="num ${status.className}">${row.balance > 0 ? "+" : ""}${formatCurrency(row.balance)}</td><td class="${status.className}">${status.label}</td></tr>`;
     }).join("");
     const settlementRows = settlements.map((item, index) => `<tr><td>${index + 1}</td><td><strong>${escapeHtml(item.fromName)}</strong></td><td>chuyển cho</td><td><strong>${escapeHtml(item.toName)}</strong></td><td class="num status-pay">${formatCurrency(item.amount)}</td><td>Chưa thanh toán</td></tr>`).join("");
-    const expenseRows = [...model.includedExpenses].sort((a, b) => String(a.date).localeCompare(String(b.date))).map((item, index) => `<tr><td>${index + 1}</td><td>${escapeHtml(formatExpenseDateTime(item.date))}</td><td><strong>${escapeHtml(item.description)}</strong>${item.note ? `<br><small>${escapeHtml(item.note)}</small>` : ""}</td><td>${escapeHtml(item.category || "Khác")}</td><td>${Logic.isFundExpense(item) ? "Quỹ chuyến đi" : `Cá nhân · ${escapeHtml(memberName(item.payerId))}`}</td><td>${escapeHtml(item.participantIds.map(memberName).join(", "))}</td><td class="num"><strong>${formatCurrency(item.amount)}</strong><br><small>${formatCurrency(averagePerParticipant(item))}/người</small></td></tr>`).join("");
-    const plannedRows = [...model.plannedExpenses].sort((a, b) => String(a.date).localeCompare(String(b.date))).map((item, index) => `<tr><td>${index + 1}</td><td>${escapeHtml(formatExpenseDateTime(item.date))}</td><td><strong>${escapeHtml(item.description)}</strong>${item.note ? `<br><small>${escapeHtml(item.note)}</small>` : ""}</td><td>${escapeHtml(item.category || "Khác")}</td><td>${escapeHtml(memberName(item.payerId))}</td><td class="num">${formatCurrency(item.amount)}</td><td>Chưa tính</td></tr>`).join("");
+    const expenseRows = [...model.includedExpenses].sort((a, b) => String(a.date).localeCompare(String(b.date))).map((item, index) => `<tr><td>${index + 1}</td><td>${escapeHtml(formatExpenseDateTime(item.date))}</td><td><strong>${escapeHtml(item.description)}</strong>${item.note ? `<br><small>${escapeHtml(item.note)}</small>` : ""}</td><td>${escapeHtml(item.category || "Khác")}</td><td>${Logic.isFundExpense(item) ? "Quỹ chuyến đi" : `Cá nhân · ${escapeHtml(expensePayerDetails(item).join("; "))}`}</td><td>${escapeHtml(item.participantIds.map(memberName).join(", "))}</td><td class="num"><strong>${formatCurrency(item.amount)}</strong><br><small>${formatCurrency(averagePerParticipant(item))}/người</small></td></tr>`).join("");
+    const plannedRows = [...model.plannedExpenses].sort((a, b) => String(a.date).localeCompare(String(b.date))).map((item, index) => `<tr><td>${index + 1}</td><td>${escapeHtml(formatExpenseDateTime(item.date))}</td><td><strong>${escapeHtml(item.description)}</strong>${item.note ? `<br><small>${escapeHtml(item.note)}</small>` : ""}</td><td>${escapeHtml(item.category || "Khác")}</td><td>${escapeHtml(expensePayerDetails(item).join("; "))}</td><td class="num">${formatCurrency(item.amount)}</td><td>Chưa tính</td></tr>`).join("");
     const paymentRows = [...trip.payments].sort((a, b) => String(b.paidAt).localeCompare(String(a.paidAt))).map((item, index) => `<tr><td>${index + 1}</td><td>${escapeHtml(formatExpenseDateTime(item.paidAt))}</td><td>${escapeHtml(memberName(item.fromId))}</td><td>${escapeHtml(memberName(item.toId))}</td><td class="num status-done">${formatCurrency(item.amount)}</td><td>Đã thanh toán</td></tr>`).join("");
     const fundRows = [...trip.fundTransactions].sort((a, b) => String(a.occurredAt).localeCompare(String(b.occurredAt))).map((item, index) => `<tr><td>${index + 1}</td><td>${escapeHtml(formatExpenseDateTime(item.occurredAt))}</td><td>${escapeHtml(memberName(item.memberId))}</td><td>${item.type === "refund" ? "Hoàn tiền" : "Nạp thêm"}</td><td class="num ${item.type === "refund" ? "status-pay" : "status-receive"}">${item.type === "refund" ? "−" : "+"}${formatCurrency(item.amount)}</td><td>${escapeHtml(item.note || "")}</td></tr>`).join("");
 
@@ -976,7 +1017,7 @@
   dom.btnDeleteTrip.addEventListener("click", () => { if (portfolio.trips.length === 1) { showToast("Cần giữ lại ít nhất một chuyến đi."); return; } const trip = activeTrip(); if (!confirm(`Xóa toàn bộ dữ liệu của “${trip.name}” khỏi thiết bị này?`)) return; portfolio.trips = portfolio.trips.filter((t) => t.id !== trip.id); portfolio.activeTripId = portfolio.trips[0].id; resetMemberForm(); localStorage.setItem(STORAGE_KEY, JSON.stringify(portfolio)); resetExpenseForm(); render(); setSharedUrl(activeTrip().shareId || ""); showToast("Đã xóa chuyến đi khỏi thiết bị này."); });
   dom.tripForm.addEventListener("submit", (event) => { event.preventDefault(); saveTripFromDialog(); }); [dom.btnCloseTripDialog, dom.btnCancelTrip].forEach((button) => button.addEventListener("click", () => dom.tripDialog.close()));
   dom.memberForm.addEventListener("submit", (event) => { event.preventDefault(); saveMember(); }); dom.memberPrepaidAmount.addEventListener("input", () => { const value = parseMoney(dom.memberPrepaidAmount.value); dom.memberPrepaidAmount.value = value ? formatNumber(value) : ""; }); dom.btnCancelMemberEdit.addEventListener("click", () => { resetMemberForm(); renderMembers(); }); dom.memberList.addEventListener("click", (event) => { const editButton = event.target.closest("[data-edit-member]"), removeButton = event.target.closest("[data-remove-member]"); if (editButton) beginEditMember(editButton.dataset.editMember); if (removeButton) removeMember(removeButton.dataset.removeMember); });
-  dom.fundKeeper.addEventListener("change", () => { const trip = activeTrip(); if (!trip.members.some((member) => member.id === dom.fundKeeper.value)) return; trip.fundKeeperId = dom.fundKeeper.value; trip.expenses.filter(Logic.isFundExpense).forEach((expense) => { expense.payerId = trip.fundKeeperId; }); savePortfolio("Đã đổi người giữ quỹ"); render(); showToast(`Đã chọn ${memberName(trip.fundKeeperId)} giữ quỹ.`); });
+  dom.fundKeeper.addEventListener("change", () => { const trip = activeTrip(); if (!trip.members.some((member) => member.id === dom.fundKeeper.value)) return; trip.fundKeeperId = dom.fundKeeper.value; trip.expenses.filter(Logic.isFundExpense).forEach((expense) => { expense.payerId = trip.fundKeeperId; expense.payerIds = [trip.fundKeeperId]; expense.payerShares = { [trip.fundKeeperId]: expense.amount }; }); savePortfolio("Đã đổi người giữ quỹ"); render(); showToast(`Đã chọn ${memberName(trip.fundKeeperId)} giữ quỹ.`); });
   dom.fundTransactionForm.addEventListener("submit", (event) => { event.preventDefault(); saveFundTransaction(); });
   dom.fundTransactionAmount.addEventListener("input", () => { const value = parseMoney(dom.fundTransactionAmount.value); dom.fundTransactionAmount.value = value ? formatNumber(value) : ""; });
   dom.fundTransactionList.addEventListener("click", (event) => { const button = event.target.closest("[data-delete-fund-transaction]"); if (button) deleteFundTransaction(button.dataset.deleteFundTransaction); });
@@ -985,7 +1026,8 @@
   dom.expenseTableBody.addEventListener("change", (event) => { const toggle = event.target.closest("[data-toggle-expense]"); if (toggle) setExpenseIncluded(toggle.dataset.toggleExpense, toggle.checked); });
   dom.settlementList.addEventListener("click", (event) => { const button = event.target.closest("[data-mark-paid]"); if (button) markSettlementPaid(button.dataset.markPaid, button.dataset.paidTo, button.dataset.paidAmount); });
   dom.paymentHistoryList.addEventListener("click", (event) => { const button = event.target.closest("[data-undo-payment]"); if (button) undoPayment(button.dataset.undoPayment); });
-  dom.expenseSearch.addEventListener("input", renderExpenses); dom.expenseAmount.addEventListener("input", () => { const value = parseMoney(dom.expenseAmount.value); dom.expenseAmount.value = value ? formatNumber(value) : ""; updateSplitEditor(); }); dom.expensePaymentSource.addEventListener("change", updateExpensePaymentSource); dom.participantList.addEventListener("change", updateSplitEditor); $$('input[name="splitMode"]').forEach((r) => r.addEventListener("change", updateSplitEditor)); dom.customShares.addEventListener("input", (event) => { const input = event.target.closest("[data-share-member]"); if (input) { if (!input.value.includes("%")) { const value = parseMoney(input.value); input.value = input.value.trim() ? formatNumber(value) : ""; } updateCustomSuggestions(); } });
+  dom.expenseSearch.addEventListener("input", renderExpenses); dom.expenseAmount.addEventListener("input", () => { const value = parseMoney(dom.expenseAmount.value); dom.expenseAmount.value = value ? formatNumber(value) : ""; updateSplitEditor(); updatePayerPreview(); }); dom.expensePaymentSource.addEventListener("change", updateExpensePaymentSource); dom.payerList.addEventListener("change", updatePayerPreview); dom.participantList.addEventListener("change", updateSplitEditor); $$('input[name="splitMode"]').forEach((r) => r.addEventListener("change", updateSplitEditor)); dom.customShares.addEventListener("input", (event) => { const input = event.target.closest("[data-share-member]"); if (input) { if (!input.value.includes("%")) { const value = parseMoney(input.value); input.value = input.value.trim() ? formatNumber(value) : ""; } updateCustomSuggestions(); } });
+  dom.btnSelectAllPayers.addEventListener("click", () => { $$('input[name="payer"]').forEach((input) => { input.checked = true; }); updatePayerPreview(); }); dom.btnClearPayers.addEventListener("click", () => { $$('input[name="payer"]').forEach((input) => { input.checked = false; }); updatePayerPreview(); });
   dom.btnSelectAll.addEventListener("click", () => { $$('input[name="participant"]').forEach((i) => { i.checked = true; }); updateSplitEditor(); }); dom.btnClearParticipants.addEventListener("click", () => { $$('input[name="participant"]').forEach((i) => { i.checked = false; }); updateSplitEditor(); }); dom.btnCancelEdit.addEventListener("click", resetExpenseForm);
   dom.btnExportJson.addEventListener("click", () => download("trip-split-backup.json", JSON.stringify(portfolio, null, 2), "application/json;charset=utf-8")); dom.btnExportCsv.addEventListener("click", exportCsv); dom.btnPreviewPdf.addEventListener("click", openPdfPreview); dom.btnClosePdfPreview.addEventListener("click", closePdfPreview); dom.btnCancelPdfPreview.addEventListener("click", closePdfPreview); dom.btnPrintPdf.addEventListener("click", printPdfReport); dom.fileImportJson.addEventListener("change", () => { if (dom.fileImportJson.files[0]) importJson(dom.fileImportJson.files[0]); }); dom.btnGenerateSecret.addEventListener("click", generateAppsScriptSecret); dom.btnCheckAppsScript.addEventListener("click", checkAppsScript); dom.btnShareSheet.addEventListener("click", shareSheet); dom.appsScriptUrl.addEventListener("change", () => { localStorage.setItem(SCRIPT_URL_KEY, dom.appsScriptUrl.value.trim()); setSheetStatus("idle", "Chưa kiểm tra kết nối", "URL đã thay đổi. Hãy kiểm tra lại trước khi tạo Sheet."); }); dom.appsScriptSecret.addEventListener("change", () => localStorage.setItem(SCRIPT_SECRET_KEY, dom.appsScriptSecret.value.trim()));
 

@@ -160,12 +160,18 @@
       <section class="card">
         <div class="section-title"><h2 id="expenseFormTitle">Thêm khoản chi</h2><p>Chỉ cần 3 bước: nội dung, số tiền, ai tham gia.</p></div>
         <form id="expenseForm">
-          <div class="form-grid form-grid--4">
+          <div class="form-grid form-grid--3">
             <div class="field"><label for="expenseDescription">Nội dung <span>*</span></label><input id="expenseDescription" type="text" maxlength="120" placeholder="Ví dụ: Tiền phòng" /></div>
             <div class="field"><label for="expenseAmount">Tổng tiền <span>*</span></label><div class="money-input"><input id="expenseAmount" type="text" inputmode="numeric" placeholder="0" autocomplete="off" /><span>₫</span></div></div>
-            <div class="field"><label for="expensePayer">Người trả <span>*</span></label><select id="expensePayer"></select></div>
             <div class="field"><label for="expensePaymentSource">Nguồn thanh toán</label><select id="expensePaymentSource"><option value="personal">Cá nhân tự trả</option><option value="fund">Quỹ chuyến đi</option></select></div>
           </div>
+
+          <fieldset id="payerFieldset" class="fieldset">
+            <legend>Người trả <span>*</span></legend>
+            <div class="fieldset__actions"><button id="btnSelectAllPayers" type="button" class="link-button">Chọn tất cả</button><button id="btnClearPayers" type="button" class="link-button">Bỏ chọn</button></div>
+            <div id="payerList" class="participant-grid"></div>
+            <div id="payerSplitPreview" class="split-preview">Chọn người đã trực tiếp thanh toán.</div>
+          </fieldset>
 
           <fieldset class="fieldset">
             <legend>Người tham gia <span>*</span></legend>
