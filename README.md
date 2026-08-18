@@ -1,100 +1,110 @@
-# vinext-starter
+# Travel Hub — TripSplit
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
+Trang web cá nhân dành cho việc quản lý chuyến đi và chia chi phí nhóm. Công cụ
+TripSplit giúp theo dõi thành viên, quỹ chung, khoản chi, công nợ và báo cáo của
+từng chuyến đi trên cùng một giao diện.
 
-## Prerequisites
+## Truy cập
 
-- Node.js `>=22.13.0`
+- Website: [tripchia.trungnguyen-fit71.chatgpt.site](https://tripchia.trungnguyen-fit71.chatgpt.site/)
+- Công cụ TripSplit: [Mở TripSplit](https://tripchia.trungnguyen-fit71.chatgpt.site/cong-cu)
 
-## Quick Start
+## Tính năng chính
+
+- Quản lý nhiều chuyến đi độc lập.
+- Quản lý thành viên và thông tin liên hệ của từng chuyến.
+- Theo dõi quỹ chung: tạm ứng, nạp thêm, hoàn tiền và chi từ quỹ.
+- Ghi nhận chi phí cá nhân hoặc chi phí thanh toán từ quỹ.
+- Tự động tính phần chia, số dư và phương án quyết toán.
+- Phân biệt khoản đã chốt với khoản chi phí kế hoạch.
+- Chia sẻ chuyến đi bằng liên kết.
+- Xuất báo cáo PDF, CSV và sao lưu hoặc khôi phục bằng JSON.
+- Đồng bộ báo cáo với Google Sheet thông qua Google Apps Script.
+
+## Công nghệ
+
+- Next.js 16, React 19 và TypeScript.
+- vinext/Vite cho quá trình build và triển khai.
+- Cloudflare D1 và Drizzle ORM cho dữ liệu phía máy chủ.
+- HTML, CSS và JavaScript cho không gian làm việc TripSplit.
+- Node.js từ phiên bản `22.13.0` trở lên.
+
+## Chạy dự án trên máy
+
+### 1. Cài đặt
 
 ```bash
-npm install
+npm ci
+```
+
+### 2. Chạy môi trường phát triển
+
+```bash
 npm run dev
-npm run build
 ```
 
-This starter does not use `wrangler.jsonc`.
+Mở địa chỉ được hiển thị trong cửa sổ dòng lệnh để xem website.
 
-## Included Shape
+### 3. Kiểm tra trước khi gửi code
 
-- edit site code under `app/`
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
-
-## Workspace Auth Headers
-
-Signed-in visitors receive both `oai-authenticated-user-id` and `oai-authenticated-user-email`. Private Sites require every visitor to sign in; public Sites may also have anonymous visitors, for whom neither header is present.
-
-The user ID is stable for the same user on the same Site and different across Sites. Email and name are intended for display or contact purposes.
-
-SIWC-authenticated workspace sites may also receive
-`oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
-`name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
-`oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
-
-Treat the full name as optional and fall back to email when it is absent:
-
-```tsx
-import { headers } from "next/headers";
-
-export default async function Home() {
-  const requestHeaders = await headers();
-  const userId = requestHeaders.get("oai-authenticated-user-id");
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
-
-  const displayName = fullName ?? email;
-  // ...
-}
+```bash
+npm run lint
+npm test
 ```
 
-## Optional Dispatch-Owned ChatGPT Sign-In
+Lệnh `npm test` sẽ build toàn bộ ứng dụng trước khi chạy bộ kiểm thử giao diện
+đã kết xuất.
 
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
-optional or required ChatGPT sign-in:
+## Cấu trúc chính
 
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send
-  anonymous visitors through Sign in with ChatGPT.
-- Use `chatGPTSignInPath(returnTo)` and `chatGPTSignOutPath(returnTo)` for
-  browser links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in
-  or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because
-  they depend on per-request identity headers.
+```text
+app/                      Trang web và các API phía máy chủ
+public/tripsplit/         Giao diện và nghiệp vụ của công cụ TripSplit
+tests/                    Bộ kiểm thử tự động
+db/                       Khai báo dữ liệu với Drizzle
+drizzle/                  Các phiên bản thay đổi cơ sở dữ liệu
+.openai/hosting.json      Cấu hình dự án đang được triển khai
+FUND_MANAGEMENT_BA.md     Đặc tả nghiệp vụ quỹ chuyến đi
+FEATURE_ARCHITECTURE.md   Tài liệu kiến trúc tính năng
+```
 
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the
-OAuth cookies, and identity header injection. Do not implement app routes for
-those reserved paths. Routes that do not import and call the helper remain
-anonymous-compatible.
+## Quy trình đóng góp
 
-SIWC establishes identity only; it does not prove workspace membership. Use the
-Sites hosting platform's access policy controls for workspace-wide restrictions,
-or enforce explicit server-side membership or allowlist checks.
+Không sửa trực tiếp trên nhánh `main`. Mỗi thay đổi nên đi qua một nhánh riêng:
 
-Use SIWC for account pages, user-specific dashboards, saved records, and write
-actions tied to the current ChatGPT user. Leave public content anonymous.
+```bash
+git switch main
+git pull
+git switch -c codex/ten-thay-doi
 
-## Useful Commands
+# Chỉnh sửa và kiểm tra code
+npm run lint
+npm test
 
-- `npm run dev`: start local development
-- `npm run build`: verify the vinext build output
-- `npm test`: build the starter and verify its rendered loading skeleton
-- `npm run db:generate`: generate Drizzle migrations after schema changes
+git add .
+git commit -m "feat: mô tả ngắn gọn thay đổi"
+git push -u origin codex/ten-thay-doi
+```
 
-## Learn More
+Sau khi đẩy nhánh, tạo Pull Request trên GitHub, chờ kiểm tra tự động hoàn tất
+rồi mới hợp nhất vào `main`.
 
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+## Quy ước commit
+
+- `feat:` thêm tính năng.
+- `fix:` sửa lỗi.
+- `docs:` cập nhật tài liệu.
+- `test:` thêm hoặc sửa kiểm thử.
+- `refactor:` cải tổ code nhưng không thay đổi hành vi.
+- `chore:` công việc bảo trì dự án.
+
+## An toàn dữ liệu
+
+- Không commit mật khẩu, khóa bí mật hoặc file `.env` lên GitHub.
+- Không commit gói triển khai cục bộ `.codex-site.tar.gz`.
+- Dữ liệu lưu trên thiết bị nên được sao lưu bằng JSON trước khi xóa dữ liệu
+  trình duyệt hoặc chuyển máy.
+
+## Trạng thái
+
+Dự án đang được phát triển và sử dụng cho website cá nhân Travel Hub.
