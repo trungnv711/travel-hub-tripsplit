@@ -615,6 +615,20 @@ dialog::backdrop { background: rgba(20, 20, 19, .5); backdrop-filter: blur(3px);
 .dialog-title h2 { font-size: 18px; font-weight: 700; }
 .dialog-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
+.auth-dialog { width: min(460px, calc(100% - 28px)); }
+.auth-dialog .dialog-form { gap: 16px; }
+.btn--google { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; background: var(--surface); border-color: var(--line); color: var(--text); }
+.btn--google span { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; color: #4285f4; background: #fff; border: 1px solid var(--line); font-weight: 800; }
+.auth-divider { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 12px; }
+.auth-divider::before, .auth-divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.auth-dialog label small { color: var(--muted); font-weight: 400; }
+.auth-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.auth-error { min-height: 18px; margin: -4px 0 0; }
+.auth-text-button { justify-self: center; border: 0; padding: 4px 8px; color: var(--primary-strong); background: transparent; cursor: pointer; font: inherit; font-size: 13px; font-weight: 650; }
+.auth-text-button:hover { text-decoration: underline; }
+.auth-note { padding: 11px 12px; border-radius: var(--radius-sm); color: var(--muted); background: var(--surface-2); font-size: 12px; line-height: 1.5; }
+.auth-dialog[data-busy="true"] button { pointer-events: none; opacity: .65; }
+
 /* ===================== PDF report preview ===================== */
 .pdf-dialog {
   width: min(1120px, calc(100% - 24px));
@@ -768,6 +782,7 @@ dialog::backdrop { background: rgba(20, 20, 19, .5); backdrop-filter: blur(3px);
   .fund-ledger__item .icon-button { grid-column: 1 / -1; width: 100%; }
   .participant-grid { grid-template-columns: 1fr; }
   .home-kpis { grid-template-columns: 1fr; }
+  .auth-actions { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 360px) {

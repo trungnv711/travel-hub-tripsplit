@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { getDb } from "../../../../db";
 import { sharedTrips, tripHistory } from "../../../../db/schema";
-import { getChatGPTUser } from "../../../chatgpt-auth";
+import { getCurrentUser } from "../../../auth";
 
 const SHARE_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_TRIP_BYTES = 750_000;
@@ -20,9 +20,9 @@ function validateTrip(trip: unknown): trip is Record<string, unknown> {
   );
 }
 
-export async function GET(_request: Request, context: RouteContext) {
+export async function GET(request: Request, context: RouteContext) {
   try {
-    const user = await getChatGPTUser();
+    const user = await getCurrentUser(request);
     const { shareId } = await context.params;
     if (!SHARE_ID_PATTERN.test(shareId)) {
       return Response.json({ error: "Link chia sẻ không hợp lệ." }, { status: 400 });
@@ -50,7 +50,7 @@ export async function GET(_request: Request, context: RouteContext) {
 
 export async function PUT(request: Request, context: RouteContext) {
   try {
-    const user = await getChatGPTUser();
+    const user = await getCurrentUser(request);
     const { shareId } = await context.params;
     if (!SHARE_ID_PATTERN.test(shareId)) {
       return Response.json({ error: "Link chia sẻ không hợp lệ." }, { status: 400 });

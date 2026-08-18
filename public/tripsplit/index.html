@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#ffffff" />
   <meta name="description" content="Quản lý và chia chi phí cho nhiều chuyến đi, xuất và chia sẻ Google Sheet." />
   <title>TripSplit — Chia chi phí nhóm</title>
-  <link rel="stylesheet" href="styles.css?v=17" />
+  <link rel="stylesheet" href="styles.css?v=18" />
 </head>
 <body>
   <header class="appbar">
@@ -28,8 +28,8 @@
           <strong id="accountName">Chế độ khách</strong>
           <span id="accountEmail">Đăng nhập để lưu trên mọi thiết bị</span>
         </div>
-        <a id="btnSignIn" class="btn btn--soft" href="/signin-with-chatgpt?return_to=%2Fcong-cu" target="_top">Đăng nhập</a>
-        <a id="btnSignOut" class="btn btn--soft hidden" href="/signout-with-chatgpt?return_to=%2Fcong-cu" target="_top">Đăng xuất</a>
+        <button id="btnSignIn" class="btn btn--soft" type="button">Đăng nhập</button>
+        <button id="btnSignOut" class="btn btn--soft hidden" type="button">Đăng xuất</button>
       </div>
     </div>
   </header>
@@ -288,6 +288,27 @@
     </form>
   </dialog>
 
+  <dialog id="authDialog" class="auth-dialog" aria-labelledby="authDialogTitle">
+    <form id="authForm" class="dialog-form">
+      <div class="dialog-title">
+        <div><h2 id="authDialogTitle">Đăng nhập TripChia</h2><p>Lưu và đồng bộ các chuyến đi an toàn trên mọi thiết bị.</p></div>
+        <button id="btnCloseAuthDialog" class="icon-button" type="button" aria-label="Đóng">✕</button>
+      </div>
+      <button id="btnGoogleSignIn" class="btn btn--google" type="button"><span aria-hidden="true">G</span> Tiếp tục bằng Google</button>
+      <div class="auth-divider"><span>hoặc dùng email</span></div>
+      <div class="field"><label for="authDisplayName">Tên hiển thị <small>(dùng khi đăng ký)</small></label><input id="authDisplayName" type="text" autocomplete="name" maxlength="80" placeholder="Nguyễn Văn A" /></div>
+      <div class="field"><label for="authEmail">Email</label><input id="authEmail" type="email" autocomplete="email" required placeholder="ban@example.com" /></div>
+      <div class="field"><label for="authPassword">Mật khẩu</label><input id="authPassword" type="password" autocomplete="current-password" minlength="6" required placeholder="Tối thiểu 6 ký tự" /></div>
+      <p id="authError" class="form-error auth-error" role="alert"></p>
+      <div class="auth-actions">
+        <button id="btnEmailSignIn" class="btn btn--primary" type="submit">Đăng nhập</button>
+        <button id="btnEmailSignUp" class="btn btn--soft" type="button">Tạo tài khoản</button>
+      </div>
+      <button id="btnResetPassword" class="auth-text-button" type="button">Quên mật khẩu?</button>
+      <p class="auth-note">Thông tin đăng nhập được Firebase Authentication bảo vệ. TripChia không lưu mật khẩu của bạn.</p>
+    </form>
+  </dialog>
+
   <dialog id="pdfPreviewDialog" class="pdf-dialog" aria-labelledby="pdfPreviewTitle">
     <div class="pdf-dialog__shell">
       <div class="pdf-dialog__header">
@@ -330,9 +351,10 @@
       });
     })();
   </script>
-  <script src="logic.js?v=17"></script>
-  <script src="report.js?v=17"></script>
-  <script src="dashboard.js?v=17"></script>
-  <script src="app.js?v=17"></script>
+  <script src="logic.js?v=18"></script>
+  <script src="report.js?v=18"></script>
+  <script src="dashboard.js?v=18"></script>
+  <script type="module" src="firebase-auth.js?v=18"></script>
+  <script src="app.js?v=18"></script>
 </body>
 </html>

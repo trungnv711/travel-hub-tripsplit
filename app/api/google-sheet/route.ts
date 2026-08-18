@@ -1,4 +1,4 @@
-import { getChatGPTUser } from "../../chatgpt-auth";
+import { getCurrentUser } from "../../auth";
 
 const SCRIPT_URL_PATTERN = /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/;
 const MAX_PAYLOAD_BYTES = 750_000;
@@ -37,7 +37,7 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: numbe
 }
 
 export async function POST(request: Request) {
-  const user = await getChatGPTUser();
+  const user = await getCurrentUser(request);
   if (!user) return Response.json({ error: "Vui lòng đăng nhập trước khi kết nối Google Sheet." }, { status: 401 });
 
   try {

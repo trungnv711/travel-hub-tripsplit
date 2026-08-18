@@ -20,12 +20,14 @@ từng chuyến đi trên cùng một giao diện.
 - Chia sẻ chuyến đi bằng liên kết.
 - Xuất báo cáo PDF, CSV và sao lưu hoặc khôi phục bằng JSON.
 - Đồng bộ báo cáo với Google Sheet thông qua Google Apps Script.
+- Đăng ký, đăng nhập bằng email hoặc Google với Firebase Authentication.
 
 ## Công nghệ
 
 - Next.js 16, React 19 và TypeScript.
 - vinext/Vite cho quá trình build và triển khai.
 - Cloudflare D1 và Drizzle ORM cho dữ liệu phía máy chủ.
+- Firebase Authentication cho danh tính người dùng trên Cloudflare.
 - HTML, CSS và JavaScript cho không gian làm việc TripSplit.
 - Node.js từ phiên bản `22.13.0` trở lên.
 
