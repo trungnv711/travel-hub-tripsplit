@@ -23,7 +23,7 @@
     "btnClearParticipants", "tripDialog", "tripForm", "tripDialogTitle", "tripId", "tripName",
     "tripDestination", "tripStartDate", "tripEndDate", "tripStatusInput", "tripError",
     "btnCloseTripDialog", "btnCancelTrip", "accountBox", "accountName", "accountEmail",
-    "btnSignIn", "btnSignOut", "shareControl", "shareMenu", "shareMenuHint", "shareNative",
+    "btnSignIn", "btnSignOut", "authDialog", "authForm", "authDisplayName", "authEmail", "authPassword", "authError", "btnCloseAuthDialog", "btnGoogleSignIn", "btnEmailSignIn", "btnEmailSignUp", "btnResetPassword", "shareControl", "shareMenu", "shareMenuHint", "shareNative",
     "shareEmail", "shareEmailHint", "btnHome", "homeView", "workspaceView", "btnOpenCurrentTrip", "btnHomeNewTrip", "homePeriod", "homePeriodHint", "homeTripCount", "homeTotalExpense", "homeAveragePerson", "homeExpenseCount", "homeCategoryChart", "homeContributorList", "homeTripList",
     "fundKeeper", "fundTotalDeposited", "fundTotalSpent", "fundTotalRefunded", "fundBalance", "fundBalanceLabel", "fundBalanceCard", "fundTransactionForm", "fundTransactionMember", "fundTransactionType", "fundTransactionAmount", "fundTransactionNote", "fundTransactionList", "fundError"
   ].map((id) => [id, document.getElementById(id)]));
@@ -39,6 +39,7 @@
   let preparedShareUrl = "";
   let sharePreparationToken = 0;
   let currentView = "workspace";
+  let firebaseAuthPromise = null;
   const SHARE_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
   function uid(prefix) {
@@ -149,14 +150,29 @@
     history.replaceState({}, "", shareId ? `${location.pathname}?trip=${encodeURIComponent(shareId)}` : location.pathname);
     return outerUrl;
   }
-  function accountReturnPath() {
-    const shareId = activeTrip()?.shareId || shareIdFromUrl();
-    return shareId ? `/cong-cu?trip=${encodeURIComponent(shareId)}` : "/cong-cu";
+  function firebaseAuthClient() {
+    if (window.TripSplitFirebaseAuth) return Promise.resolve(window.TripSplitFirebaseAuth);
+    if (!firebaseAuthPromise) {
+      firebaseAuthPromise = new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error("Firebase Authentication chưa tải được.")), 10_000);
+        window.addEventListener("tripsplit-firebase-ready", () => {
+          clearTimeout(timeout);
+          resolve(window.TripSplitFirebaseAuth);
+        }, { once: true });
+      });
+    }
+    return firebaseAuthPromise;
+  }
+  async function authFetch(url, init = {}) {
+    const headers = new Headers(init.headers || {});
+    try {
+      const auth = await firebaseAuthClient();
+      const token = await auth.getIdToken();
+      if (token) headers.set("Authorization", `Bearer ${token}`);
+    } catch { /* continue as guest when Firebase is unavailable */ }
+    return fetch(url, { ...init, headers });
   }
   function renderAccount() {
-    const returnTo = encodeURIComponent(accountReturnPath());
-    dom.btnSignIn.href = `/signin-with-chatgpt?return_to=${returnTo}`;
-    dom.btnSignOut.href = `/signout-with-chatgpt?return_to=${returnTo}`;
     if (account?.authenticated) {
       dom.accountName.textContent = account.user.displayName || "Tài khoản TripSplit";
       dom.accountEmail.textContent = `${account.user.email} · Đã lưu đám mây`;
@@ -171,12 +187,12 @@
   }
   async function loadAccountTrips() {
     try {
-      const meResponse = await fetch("/api/me", { cache: "no-store" });
+      const meResponse = await authFetch("/api/me", { cache: "no-store" });
       account = meResponse.ok ? await meResponse.json() : { authenticated: false };
       renderAccount();
       if (!account.authenticated) return;
 
-      const tripsResponse = await fetch("/api/account/trips", { cache: "no-store" });
+      const tripsResponse = await authFetch("/api/account/trips", { cache: "no-store" });
       if (!tripsResponse.ok) return;
       const result = await tripsResponse.json();
       const accountTrips = Array.isArray(result.trips)
@@ -215,7 +231,7 @@
   async function fetchSharedTrip(shareId) {
     let response;
     for (let attempt = 0; attempt < 3; attempt += 1) {
-      response = await fetch(`/api/shared-trips/${encodeURIComponent(shareId)}`);
+      response = await authFetch(`/api/shared-trips/${encodeURIComponent(shareId)}`);
       if (response.status !== 404 || attempt === 2) return response;
       await new Promise((resolve) => setTimeout(resolve, 450 * (attempt + 1)));
     }
@@ -225,7 +241,7 @@
     if (!trip.shareId || location.protocol === "file:") return;
     clearTimeout(savePortfolio.timer);
     if (activeTrip().id === trip.id) dom.saveStatus.textContent = "Đang đồng bộ…";
-    const response = await fetch(`/api/shared-trips/${encodeURIComponent(trip.shareId)}`, {
+    const response = await authFetch(`/api/shared-trips/${encodeURIComponent(trip.shareId)}`, {
       method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ trip })
     });
     const result = await response.json().catch(() => ({}));
@@ -244,7 +260,7 @@
     const creation = (async () => {
       clearTimeout(savePortfolio.timer);
       if (activeTrip().id === trip.id) dom.saveStatus.textContent = "Đang tạo link riêng cho trip…";
-      const response = await fetch("/api/shared-trips", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ trip }) });
+      const response = await authFetch("/api/shared-trips", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ trip }) });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || "Không thể tạo link cho chuyến đi.");
       trip.shareId = result.shareId;
@@ -802,7 +818,7 @@
   }
   async function callSheetBridge(action) {
     const config = sheetConfig(action === "sync");
-    const response = await fetch("/api/google-sheet", {
+    const response = await authFetch("/api/google-sheet", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action, ...config, payload: action === "sync" ? buildSheetPayload() : undefined }),
@@ -875,7 +891,71 @@
     const reader = new FileReader(); reader.onload = () => { try { const candidate = JSON.parse(String(reader.result)); let next; if (Logic.validatePortfolio(candidate).valid) next = normalizePortfolio(candidate); else if (Logic.validateState(candidate).valid) next = migrateLegacy(candidate); else throw new Error("Cấu trúc dữ liệu không hợp lệ."); portfolio = next; savePortfolio("Đã khôi phục dữ liệu"); editingExpenseId = null; resetExpenseForm(); render(); showToast("Khôi phục dữ liệu thành công."); } catch (error) { showToast(`Không thể nhập file: ${error.message}`); } finally { dom.fileImportJson.value = ""; } }; reader.readAsText(file);
   }
 
+  function firebaseErrorMessage(error) {
+    const code = String(error?.code || "");
+    if (code.includes("invalid-credential") || code.includes("wrong-password") || code.includes("user-not-found")) return "Email hoặc mật khẩu chưa đúng.";
+    if (code.includes("email-already-in-use")) return "Email này đã có tài khoản. Hãy chọn Đăng nhập.";
+    if (code.includes("weak-password")) return "Mật khẩu cần có ít nhất 6 ký tự.";
+    if (code.includes("invalid-email")) return "Địa chỉ email chưa hợp lệ.";
+    if (code.includes("popup-closed-by-user")) return "Cửa sổ đăng nhập Google đã được đóng.";
+    if (code.includes("popup-blocked")) return "Trình duyệt đang chặn cửa sổ đăng nhập Google.";
+    if (code.includes("unauthorized-domain")) return "Tên miền này chưa được cho phép trong Firebase Authentication.";
+    if (code.includes("too-many-requests")) return "Bạn đã thử quá nhiều lần. Vui lòng đợi một lúc rồi thử lại.";
+    return error instanceof Error ? error.message : "Không thể đăng nhập. Vui lòng thử lại.";
+  }
+  function setAuthBusy(busy) {
+    dom.authDialog.dataset.busy = busy ? "true" : "false";
+    [dom.btnGoogleSignIn, dom.btnEmailSignIn, dom.btnEmailSignUp, dom.btnResetPassword].forEach((button) => { button.disabled = busy; });
+  }
+  function openAuthDialog() {
+    dom.authError.textContent = "";
+    dom.authDialog.showModal();
+    setTimeout(() => dom.authEmail.focus(), 0);
+  }
+  async function runAuthAction(action, successMessage) {
+    setAuthBusy(true);
+    dom.authError.textContent = "";
+    try {
+      await action(await firebaseAuthClient());
+      dom.authDialog.close();
+      showToast(successMessage);
+    } catch (error) {
+      dom.authError.textContent = firebaseErrorMessage(error);
+    } finally { setAuthBusy(false); }
+  }
+  async function initializeAccountAuth() {
+    try {
+      const auth = await firebaseAuthClient();
+      await auth.waitUntilReady();
+      await loadAccountTrips();
+      auth.onChange(() => { loadAccountTrips(); });
+    } catch {
+      await loadAccountTrips();
+    }
+  }
+
   dom.tripSelect.addEventListener("change", () => { closeShareMenu(); portfolio.activeTripId = dom.tripSelect.value; editingExpenseId = null; resetMemberForm(); localStorage.setItem(STORAGE_KEY, JSON.stringify(portfolio)); resetExpenseForm(); render(); setSharedUrl(activeTrip().shareId || ""); });
+  dom.btnSignIn.addEventListener("click", openAuthDialog);
+  dom.btnCloseAuthDialog.addEventListener("click", () => dom.authDialog.close());
+  dom.authDialog.addEventListener("click", (event) => { if (event.target === dom.authDialog) dom.authDialog.close(); });
+  dom.authForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    runAuthAction((auth) => auth.signInWithEmail(dom.authEmail.value.trim(), dom.authPassword.value), "Đăng nhập thành công.");
+  });
+  dom.btnEmailSignUp.addEventListener("click", () => {
+    if (!dom.authForm.reportValidity()) return;
+    runAuthAction((auth) => auth.createAccount(dom.authEmail.value.trim(), dom.authPassword.value, dom.authDisplayName.value.trim()), "Tạo tài khoản thành công.");
+  });
+  dom.btnGoogleSignIn.addEventListener("click", () => runAuthAction((auth) => auth.signInWithGoogle(), "Đăng nhập Google thành công."));
+  dom.btnResetPassword.addEventListener("click", () => {
+    const email = dom.authEmail.value.trim();
+    if (!validEmail(email)) { dom.authError.textContent = "Hãy nhập email hợp lệ để nhận liên kết đặt lại mật khẩu."; return; }
+    runAuthAction((auth) => auth.resetPassword(email), "Đã gửi email đặt lại mật khẩu.");
+  });
+  dom.btnSignOut.addEventListener("click", async () => {
+    try { const auth = await firebaseAuthClient(); await auth.signOut(); showToast("Đã đăng xuất."); }
+    catch (error) { showToast(firebaseErrorMessage(error)); }
+  });
   dom.btnHome.addEventListener("click", showHome);
   dom.btnOpenCurrentTrip.addEventListener("click", showWorkspace);
   dom.btnHomeNewTrip.addEventListener("click", () => openTripDialog());
@@ -914,7 +994,7 @@
     dom.appsScriptSecret.value = localStorage.getItem(SCRIPT_SECRET_KEY) || "";
     renderSheetLink();
     dom.expenseDate.value = localDateString();
-    await loadAccountTrips();
+    await initializeAccountAuth();
     await loadSharedTripFromUrl();
     localStorage.setItem(STORAGE_KEY, JSON.stringify(portfolio));
     render();

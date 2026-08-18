@@ -38,8 +38,8 @@ test("ships the professional TripSplit workspace and account controls", async ()
   assert.match(html, /id="btnHome"/);
   assert.match(html, /id="homeView"/);
   assert.match(html, /id="homePeriod"/);
-  assert.match(app, /fetch\("\/api\/me"/);
-  assert.match(app, /fetch\("\/api\/account\/trips"/);
+  assert.match(app, /authFetch\("\/api\/me"/);
+  assert.match(app, /authFetch\("\/api\/account\/trips"/);
   assert.match(app, /loadSharedTripFromUrl/);
   assert.match(app, /navigator\.share/);
   assert.match(app, /Logic\.buildShareContent/);
@@ -129,7 +129,7 @@ test("checks and synchronizes Google Sheet through the protected bridge", async 
     read("public/tripsplit/Code.gs"),
   ]);
 
-  assert.match(route, /getChatGPTUser/);
+  assert.match(route, /getCurrentUser/);
   assert.match(route, /script\\\.google\\\.com/);
   assert.match(route, /MAX_PAYLOAD_BYTES/);
   assert.match(route, /responseMode:\s*"json"/);
@@ -177,9 +177,31 @@ test("persists owned trips and revision history in D1", async () => {
 
   assert.match(schema, /ownerId:\s*text\("owner_id"\)/);
   assert.match(schema, /tripHistory/);
-  assert.match(createRoute, /getChatGPTUser/);
+  assert.match(createRoute, /getCurrentUser/);
   assert.match(updateRoute, /action:\s*"updated"/);
   assert.match(accountRoute, /eq\(sharedTrips\.ownerId, user\.userId\)/);
   assert.match(migration, /CREATE TABLE `trip_history`/);
   assert.match(migration, /ADD `owner_id` text/);
+});
+
+test("authenticates TripSplit with Firebase on Cloudflare", async () => {
+  const [html, app, browserAuth, serverAuth, meRoute] = await Promise.all([
+    read("public/tripsplit/index.html"),
+    read("public/tripsplit/app.js"),
+    read("public/tripsplit/firebase-auth.js"),
+    read("app/auth.ts"),
+    read("app/api/me/route.ts"),
+  ]);
+
+  assert.match(html, /id="authDialog"/);
+  assert.match(html, /id="btnGoogleSignIn"/);
+  assert.match(html, /id="btnEmailSignUp"/);
+  assert.match(browserAuth, /GoogleAuthProvider/);
+  assert.match(browserAuth, /signInWithEmailAndPassword/);
+  assert.match(browserAuth, /createUserWithEmailAndPassword/);
+  assert.match(browserAuth, /tripchia-431bc\.firebaseapp\.com/);
+  assert.match(app, /headers\.set\("Authorization", `Bearer \$\{token\}`\)/);
+  assert.match(serverAuth, /identitytoolkit\.googleapis\.com\/v1\/accounts:lookup/);
+  assert.match(serverAuth, /hostname\.endsWith\("\.chatgpt\.site"\)/);
+  assert.match(meRoute, /getCurrentUser\(request\)/);
 });

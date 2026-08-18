@@ -1,6 +1,6 @@
 import { getDb } from "../../../db";
 import { sharedTrips, tripHistory } from "../../../db/schema";
-import { getChatGPTUser } from "../../chatgpt-auth";
+import { getCurrentUser } from "../../auth";
 
 const MAX_TRIP_BYTES = 750_000;
 
@@ -18,7 +18,7 @@ function validateTrip(trip: unknown): trip is Record<string, unknown> {
 
 export async function POST(request: Request) {
   try {
-    const user = await getChatGPTUser();
+    const user = await getCurrentUser(request);
     const payload = (await request.json()) as { trip?: unknown };
     if (!validateTrip(payload.trip)) {
       return Response.json({ error: "Dữ liệu chuyến đi không hợp lệ." }, { status: 400 });

@@ -1,10 +1,10 @@
 import { desc, eq } from "drizzle-orm";
 import { getDb } from "../../../../db";
 import { sharedTrips } from "../../../../db/schema";
-import { getChatGPTUser } from "../../../chatgpt-auth";
+import { getCurrentUser } from "../../../auth";
 
-export async function GET() {
-  const user = await getChatGPTUser();
+export async function GET(request: Request) {
+  const user = await getCurrentUser(request);
   if (!user) {
     return Response.json({ error: "Vui lòng đăng nhập để xem các chuyến đi đã lưu." }, { status: 401 });
   }
