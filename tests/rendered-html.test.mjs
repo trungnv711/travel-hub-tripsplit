@@ -106,6 +106,49 @@ test("supports multiple personal payers while keeping the full trip expense tota
   assert.deepEqual(Logic.getExpensePayerShares(legacyExpense), { m1: 1_240_000 });
 });
 
+test("dashboard never credits fund spending to the fund keeper", async () => {
+  await import(new URL("public/tripsplit/logic.js", root));
+  await import(new URL("public/tripsplit/dashboard.js", root));
+  const Logic = globalThis.TravelExpenseLogic;
+  const Dashboard = globalThis.TravelDashboard;
+  const members = [
+    { id: "trung", name: "Trung" },
+    { id: "tram", name: "Trâm" },
+  ];
+  const expenses = [
+    {
+      id: "personal",
+      description: "Tiền xe",
+      amount: 310_000,
+      payerId: "trung",
+      payerIds: ["trung"],
+      payerShares: { trung: 310_000 },
+      paymentSource: "personal",
+      participantIds: ["trung", "tram"],
+      splitMode: "equal",
+      included: true,
+      date: "2026-08-18",
+    },
+    {
+      id: "fund",
+      description: "Tiền phòng từ quỹ",
+      amount: 1_700_000,
+      payerId: "tram",
+      paymentSource: "fund",
+      participantIds: ["trung", "tram"],
+      splitMode: "equal",
+      included: true,
+      date: "2026-08-18",
+    },
+  ];
+  const trip = { id: "trip", name: "Bảo Lộc - Đà Lạt", members, expenses };
+
+  const dashboard = Dashboard.aggregate({ trips: [trip] }, Logic, "all", new Date("2026-08-18"));
+  assert.equal(dashboard.total, 2_010_000);
+  assert.deepEqual(dashboard.payers.map(({ name, amount }) => ({ name, amount })), [{ name: "Trung", amount: 310_000 }]);
+  assert.deepEqual(Dashboard.summarizeTrip(trip, Logic).payers, { trung: 310_000 });
+});
+
 test("excludes planned expenses from settlement, dashboard, and report totals", async () => {
   await import(new URL("public/tripsplit/logic.js", root));
   await import(new URL("public/tripsplit/report.js", root));
