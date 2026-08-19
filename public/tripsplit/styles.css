@@ -376,6 +376,8 @@ input::placeholder { color: #aba8a3; }
 }
 .fieldset legend { padding: 0 7px; font-size: 13px; font-weight: 750; }
 .fieldset__actions { position: absolute; top: 12px; right: 14px; display: flex; gap: 12px; }
+.fieldset--readonly { background: var(--surface-3); }
+.fieldset--readonly .check-card { cursor: default; opacity: .82; }
 
 .participant-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; margin-top: 6px; }
 .check-card {
@@ -487,6 +489,7 @@ input::placeholder { color: #aba8a3; }
 .fund-ledger__type--refund { background: var(--danger-soft); color: var(--danger-strong); }
 .expense-source { margin-top: 4px; color: var(--muted); font-size: 10px; font-weight: 650; }
 .expense-source--fund { color: var(--primary-strong); }
+.expense-payer-detail { display: block; max-width: 280px; margin-top: 4px; color: var(--muted); font-size: 10px; line-height: 1.45; }
 
 /* ===================== Setup guide ===================== */
 .setup-guide {

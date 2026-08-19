@@ -49,6 +49,27 @@
     return Boolean(expense) && expense.paymentSource === "fund";
   }
 
+  function getExpensePayerIds(expense) {
+    if (!expense) return [];
+    if (isFundExpense(expense)) return expense.payerId ? [expense.payerId] : [];
+    const ids = Array.isArray(expense.payerIds) ? expense.payerIds : [expense.payerId];
+    return Array.from(new Set(ids.filter((id) => typeof id === "string" && id)));
+  }
+
+  function getExpensePayerShares(expense) {
+    const ids = getExpensePayerIds(expense);
+    if (!ids.length) return {};
+    if (isFundExpense(expense)) return { [ids[0]]: toSafeInteger(expense.amount) };
+
+    const savedShares = expense.payerShares;
+    if (savedShares && typeof savedShares === "object") {
+      const shares = Object.fromEntries(ids.map((id) => [id, toSafeInteger(savedShares[id])]));
+      const total = Object.values(shares).reduce((sum, amount) => sum + amount, 0);
+      if (total === toSafeInteger(expense.amount)) return shares;
+    }
+    return splitEqual(expense.amount, ids);
+  }
+
   function calculateFundSummary(members, expenses, fundTransactions, fundKeeperId) {
     const memberRows = Object.fromEntries((members || []).map((member) => [member.id, {
       memberId: member.id,
@@ -116,9 +137,11 @@
     );
 
     includedExpenses(expenses).forEach((expense) => {
-      if (!isFundExpense(expense) && summary[expense.payerId]) {
-        summary[expense.payerId].paid += toSafeInteger(expense.amount);
-      } else if (isFundExpense(expense) && summary[expense.payerId]) {
+      if (!isFundExpense(expense)) {
+        Object.entries(getExpensePayerShares(expense)).forEach(([memberId, amount]) => {
+          if (summary[memberId]) summary[memberId].paid += toSafeInteger(amount);
+        });
+      } else if (summary[expense.payerId]) {
         summary[expense.payerId].fundPaid += toSafeInteger(expense.amount);
       }
 
@@ -241,8 +264,22 @@
       if (!Number.isSafeInteger(expense.amount) || expense.amount <= 0) {
         return { valid: false, message: `Khoản "${expense.description}" có số tiền không hợp lệ.` };
       }
-      if (!memberIds.has(expense.payerId)) {
+      const payerIds = getExpensePayerIds(expense);
+      if (!payerIds.length || payerIds.some((id) => !memberIds.has(id))) {
         return { valid: false, message: `Khoản "${expense.description}" có người trả không tồn tại.` };
+      }
+      if (expense.payerIds !== undefined && (!Array.isArray(expense.payerIds) || new Set(expense.payerIds).size !== expense.payerIds.length)) {
+        return { valid: false, message: `Khoản "${expense.description}" có danh sách người trả không hợp lệ.` };
+      }
+      if (expense.payerShares !== undefined) {
+        if (!expense.payerShares || typeof expense.payerShares !== "object" || Array.isArray(expense.payerShares)) {
+          return { valid: false, message: `Khoản "${expense.description}" có phần tự trả không hợp lệ.` };
+        }
+        const payerShareKeys = Object.keys(expense.payerShares);
+        const payerShareTotal = payerShareKeys.reduce((sum, id) => sum + toSafeInteger(expense.payerShares[id]), 0);
+        if (payerShareKeys.length !== payerIds.length || payerShareKeys.some((id) => !payerIds.includes(id)) || payerShareTotal !== expense.amount) {
+          return { valid: false, message: `Khoản "${expense.description}" có tổng tiền người trả không khớp.` };
+        }
       }
       if (!Array.isArray(expense.participantIds) || expense.participantIds.length === 0) {
         return { valid: false, message: `Khoản "${expense.description}" chưa có người tham gia.` };
@@ -363,6 +400,8 @@
     isExpenseIncluded,
     includedExpenses,
     isFundExpense,
+    getExpensePayerIds,
+    getExpensePayerShares,
     calculateFundSummary,
     calculateSummary,
     calculateOutstandingSummary,
